@@ -13,30 +13,29 @@ const (
 var configPtr unsafe.Pointer
 
 type GlobalConfig struct {
-	DeployType string `json:"deploy_type"`
-	Port       string `json:"port"`
-	Host       string `json:"host"`
-	LogDir     string `json:"log_dir"`
-	Group      string `json:"group"`
-	StorageDir string `json:"storage_dir"`
+	DeployType string `mapstructure:"deploy_type"`
+	Port       string `mapstructure:"port"`
+	Host       string `mapstructure:"host"`
+	LogDir     string `mapstructure:"log_dir"`
+	StorageDir string `mapstructure:"storage_dir"`
 
 	Tracker struct {
-		NodeId        string `json:"node_id"`
-		EnableTmpFile bool   `json:"enable_tmp_file"`
+		NodeId        string `mapstructure:"node_id"`
+		EnableTmpFile bool   `mapstructure:"enable_tmp_file"`
 	} `json:"tracker"`
 
 	Storage struct {
-		Group         string   `json:"group"`
-		FileSizeLimit int64    `json:"file_size_limit"`
-		StorageDir    string   `json:"storage_dir"`
-		Trackers      []string `json:"trackers"`
+		Group         string   `mapstructure:"group"`
+		FileSizeLimit int64    `mapstructure:"file_size_limit"`
+		StorageDir    string   `mapstructure:"storage_dir"`
+		Trackers      []string `mapstructure:"trackers"`
 	} `json:"storage"`
 }
 
-func ParseConfig() {
+func parseConfig() {
 	v := viper.New()
-	v.AddConfigPath("..")
-	v.AddConfigPath("../config")
+	v.AddConfigPath(".")
+	v.AddConfigPath("./config")
 	v.SetConfigName(DefaultConfigFileName)
 	v.SetConfigType("json")
 
@@ -55,4 +54,8 @@ func ParseConfig() {
 
 func Config() *GlobalConfig {
 	return (*GlobalConfig)(atomic.LoadPointer(&configPtr))
+}
+
+func init() {
+	parseConfig()
 }

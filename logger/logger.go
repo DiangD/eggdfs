@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"eggdfs/conf"
 	"github.com/natefinch/lumberjack"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -27,7 +28,7 @@ func getEncoder() zapcore.Encoder {
 
 func getLogWriter() zapcore.WriteSyncer {
 	lumberJackLogger := &lumberjack.Logger{
-		Filename:   "./zap.log",
+		Filename:   conf.Config().LogDir,
 		MaxSize:    10,
 		MaxBackups: 5,
 		MaxAge:     30,

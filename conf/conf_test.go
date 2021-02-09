@@ -6,6 +6,6 @@ import (
 )
 
 func TestParseConfig(t *testing.T) {
-	ParseConfig()
+	parseConfig()
 	fmt.Printf("%+v", Config())
 }

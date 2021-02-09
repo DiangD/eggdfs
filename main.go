@@ -1,7 +1,7 @@
 package main
 
 import (
-	"eggFs/server"
+	"eggdfs/server"
 )
 
 func main() {
