@@ -1,9 +1,9 @@
 package main
 
 import (
-	"eggdfs/server"
+	"eggdfs/svc"
 )
 
 func main() {
-	server.Start()
+	svc.Start()
 }

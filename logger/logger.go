@@ -1,7 +1,7 @@
 package logger
 
 import (
-	"eggdfs/conf"
+	"eggdfs/svc/conf"
 	"github.com/natefinch/lumberjack"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

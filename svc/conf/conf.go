@@ -7,23 +7,25 @@ import (
 )
 
 const (
-	DefaultConfigFileName = "eggdfs_config"
+	defaultConfigFileName = "eggdfs_config"
 )
 
 var configPtr unsafe.Pointer
 
+//GlobalConfig 全局配置
 type GlobalConfig struct {
 	DeployType string `mapstructure:"deploy_type"`
 	Port       string `mapstructure:"port"`
 	Host       string `mapstructure:"host"`
 	LogDir     string `mapstructure:"log_dir"`
-	StorageDir string `mapstructure:"storage_dir"`
 
+	//tracker配置
 	Tracker struct {
 		NodeId        string `mapstructure:"node_id"`
 		EnableTmpFile bool   `mapstructure:"enable_tmp_file"`
 	} `json:"tracker"`
 
+	//storage配置
 	Storage struct {
 		Group         string   `mapstructure:"group"`
 		FileSizeLimit int64    `mapstructure:"file_size_limit"`
@@ -32,11 +34,12 @@ type GlobalConfig struct {
 	} `json:"storage"`
 }
 
+//parseConfig 解析配置文件
 func parseConfig() {
 	v := viper.New()
 	v.AddConfigPath(".")
 	v.AddConfigPath("./config")
-	v.SetConfigName(DefaultConfigFileName)
+	v.SetConfigName(defaultConfigFileName)
 	v.SetConfigType("json")
 
 	err := v.ReadInConfig()
@@ -52,8 +55,13 @@ func parseConfig() {
 	atomic.StorePointer(&configPtr, unsafe.Pointer(&c))
 }
 
+//Config 获取配置参数
 func Config() *GlobalConfig {
 	return (*GlobalConfig)(atomic.LoadPointer(&configPtr))
+}
+
+func InitGlobalConfig() {
+	parseConfig()
 }
 
 func init() {
