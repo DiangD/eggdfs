@@ -1,43 +1,54 @@
 package conf
 
 import (
-	"eggFs/logger"
-	"encoding/json"
-	"go.uber.org/zap"
-	"io/ioutil"
-	"os"
+	"github.com/spf13/viper"
 	"sync/atomic"
 	"unsafe"
 )
 
 const (
-	ConfigFilePath = "config.json"
+	DefaultConfigFileName = "eggdfs_config"
 )
 
 var configPtr unsafe.Pointer
 
 type GlobalConfig struct {
-	Port    string `json:"port"`
-	Host    string `json:"host"`
-	Group   string `json:"group"`
-	DataDir string `json:"data_dir"`
+	DeployType string `json:"deploy_type"`
+	Port       string `json:"port"`
+	Host       string `json:"host"`
+	LogDir     string `json:"log_dir"`
+	Group      string `json:"group"`
+	StorageDir string `json:"storage_dir"`
+
+	Tracker struct {
+		NodeId        string `json:"node_id"`
+		EnableTmpFile bool   `json:"enable_tmp_file"`
+	} `json:"tracker"`
+
+	Storage struct {
+		Group         string   `json:"group"`
+		FileSizeLimit int64    `json:"file_size_limit"`
+		StorageDir    string   `json:"storage_dir"`
+		Trackers      []string `json:"trackers"`
+	} `json:"storage"`
 }
 
-func ParseConfig(path string) {
-	file, err := os.Open(path)
+func ParseConfig() {
+	v := viper.New()
+	v.AddConfigPath("..")
+	v.AddConfigPath("../config")
+	v.SetConfigName(DefaultConfigFileName)
+	v.SetConfigType("json")
+
+	err := v.ReadInConfig()
 	if err != nil {
-		logger.Panic("配置文件不存在", zap.String("path", path))
+		panic("config not exist")
 	}
-	defer func() { _ = file.Close() }()
-	data, err := ioutil.ReadAll(file)
+	c := GlobalConfig{}
+	err = v.Unmarshal(&c)
 	if err != nil {
-		logger.Panic("配置文件读取失败", zap.String("path", path))
+		panic("parse config file error,please check config")
 	}
-	var c GlobalConfig
-	if err = json.Unmarshal(data, &c); err != nil {
-		logger.Panic("配置文件解析失败", zap.String("path", path))
-	}
-	logger.Info("配置文件解析成功", zap.Any("conf", c))
 	//并发安全，指针赋值
 	atomic.StorePointer(&configPtr, unsafe.Pointer(&c))
 }

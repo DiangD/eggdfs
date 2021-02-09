@@ -6,7 +6,6 @@ import (
 )
 
 func TestParseConfig(t *testing.T) {
-	path := "../config.json"
-	ParseConfig(path)
+	ParseConfig()
 	fmt.Printf("%+v", Config())
 }
