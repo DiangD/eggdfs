@@ -2,7 +2,7 @@
   "deploy_type": "storage",
   "port": ":8081",
   "host": "localhost:8081",
-  "log_dir": "./zap.log",
+  "log_dir": "./log/zap.log",
   "tracker": {
     "node_id": "1",
     "enable_tmp_file": true

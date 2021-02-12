@@ -21,8 +21,8 @@ type GlobalConfig struct {
 
 	//tracker配置
 	Tracker struct {
-		NodeId        string `mapstructure:"node_id"`
-		EnableTmpFile bool   `mapstructure:"enable_tmp_file"`
+		NodeId        int64 `mapstructure:"node_id"`
+		EnableTmpFile bool  `mapstructure:"enable_tmp_file"`
 	} `json:"tracker"`
 
 	//storage配置
