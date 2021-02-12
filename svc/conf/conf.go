@@ -14,6 +14,7 @@ var configPtr unsafe.Pointer
 
 //GlobalConfig 全局配置
 type GlobalConfig struct {
+	Env        string `mapstructure:"env"`
 	DeployType string `mapstructure:"deploy_type"`
 	Port       string `mapstructure:"port"`
 	Host       string `mapstructure:"host"`

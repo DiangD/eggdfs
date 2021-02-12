@@ -1,4 +1,5 @@
 {
+  "env": "prod",
   "deploy_type": "storage",
   "port": ":8081",
   "host": "localhost:8081",

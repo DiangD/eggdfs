@@ -5,6 +5,12 @@ import (
 	"github.com/natefinch/lumberjack"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"os"
+)
+
+const (
+	envDebug      = "debug"
+	envProduction = "prod"
 )
 
 var (
@@ -13,17 +19,31 @@ var (
 
 func initLogger() {
 	writeSyncer := getLogWriter()
-	encoder := getEncoder()
-	core := zapcore.NewCore(encoder, writeSyncer, zapcore.DebugLevel)
+	var cores []zapcore.Core
+
+	switch conf.Config().Env {
+	case envDebug:
+		consoleCore := zapcore.NewCore(getConsoleEncoder(), zapcore.Lock(os.Stdout), zap.DebugLevel)
+		cores = append(cores, consoleCore)
+	case envProduction:
+		fileCore := zapcore.NewCore(getEncoder(), writeSyncer, zapcore.InfoLevel)
+		cores = append(cores, fileCore)
+	}
+
+	core := zapcore.NewTee(cores...)
 	zapLog = zap.New(core, zap.AddCaller())
-	zapLog.Info("日志服务启动...")
+	zapLog.Info("日志服务启动...", zap.String("Env", conf.Config().Env))
 }
 
 func getEncoder() zapcore.Encoder {
 	encoderConfig := zap.NewProductionEncoderConfig()
 	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 	encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
-	return zapcore.NewConsoleEncoder(encoderConfig)
+	return zapcore.NewJSONEncoder(encoderConfig)
+}
+
+func getConsoleEncoder() zapcore.Encoder {
+	return zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
 }
 
 func getLogWriter() zapcore.WriteSyncer {
