@@ -5,6 +5,7 @@ const (
 	DeployTypeTracker  = "tracker"
 )
 
+//返回码
 const (
 	Success = 20000 + iota
 
@@ -12,4 +13,10 @@ const (
 	FormFileNotFound
 	FileSizeExceeded
 	FileSaveFail
+)
+
+//http请求头
+const (
+	HeaderUploadFileDir = "Egg-Dfs-FileDir"
+	HeaderUUIDFileName  = "Egg-Dfs-FileName"
 )

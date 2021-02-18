@@ -61,6 +61,7 @@ func Config() *GlobalConfig {
 	return (*GlobalConfig)(atomic.LoadPointer(&configPtr))
 }
 
+//InitGlobalConfig 初始化配置
 func InitGlobalConfig() {
 	parseConfig()
 }

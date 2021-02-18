@@ -1,5 +1,5 @@
 {
-  "env": "prod",
+  "env": "debug",
   "deploy_type": "storage",
   "port": ":8081",
   "host": "localhost:8081",
@@ -10,7 +10,7 @@
   },
   "storage": {
     "group": "g1",
-    "file_size_limit": 10000000,
+    "file_size_limit": -1,
     "storage_dir": "./meta",
     "trackers": [
       "http://127.0.0.1:9000",

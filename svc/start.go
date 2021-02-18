@@ -18,6 +18,6 @@ func Start() {
 	case common.DeployTypeStorages:
 		NewStorage().Start()
 	case common.DeployTypeTracker:
-		//todo:tracker start
+		NewTracker().Start()
 	}
 }

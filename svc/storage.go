@@ -4,16 +4,13 @@ import (
 	"eggdfs/common"
 	"eggdfs/common/model"
 	"eggdfs/logger"
+	"eggdfs/svc/conf"
 	"eggdfs/util"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"net/http"
 	"os"
 	"path/filepath"
-)
-
-const (
-	headerUploadFileDir = "Egg-Dfs-FileDir"
 )
 
 type Storage struct {
@@ -56,8 +53,8 @@ func simpleUpload(c *gin.Context) {
 
 func (s *Storage) Upload(c *gin.Context) {
 	//用户自定义的存储文件夹
-	customDir := c.Request.Header.Get(headerUploadFileDir)
-	baseDir := config().Storage.StorageDir + util.GenFilePath(customDir)
+	customDir := c.GetHeader(common.HeaderUploadFileDir)
+	baseDir := config().Storage.StorageDir + "/" + util.GenFilePath(customDir)
 	if _, err := os.Stat(baseDir); err != nil {
 		err := os.MkdirAll(baseDir, os.ModePerm)
 		path, _ := filepath.Abs(config().Storage.StorageDir)
@@ -96,7 +93,27 @@ func (s *Storage) Upload(c *gin.Context) {
 	}
 
 	//保存文件
-
+	fullPath := baseDir + "/" + util.GenFileName(c.GetHeader(common.HeaderUUIDFileName), file.Filename)
+	err = c.SaveUploadedFile(file, fullPath)
+	if err != nil {
+		c.JSON(http.StatusOK, model.RespResult{
+			Status:  common.FileSaveFail,
+			Message: "文件保存失败",
+			Data:    err,
+		})
+		return
+	}
+	fi := model.FileInfo{
+		Name:   file.Filename,
+		ReName: c.GetHeader(common.HeaderUUIDFileName),
+		Size:   file.Size,
+		Group:  config().Storage.Group,
+	}
+	c.JSON(http.StatusOK, model.RespResult{
+		Status:  common.Success,
+		Message: "文件保存成功",
+		Data:    fi,
+	})
 }
 
 func (s *Storage) Start() {
@@ -114,12 +131,12 @@ func (s *Storage) Start() {
 	r := gin.Default()
 	//gin.SetMode(gin.ReleaseMode)
 
-	r.StaticFS("/static", http.Dir(config().Storage.StorageDir))
+	r.StaticFS(conf.Config().Storage.Group+"/static", http.Dir(config().Storage.StorageDir))
 
 	r.GET("/hello", hello)
 	r.Group("/v1")
 	{
-		r.GET("/upload", simpleUpload)
+		r.POST("/upload", s.Upload)
 	}
 
 	err := r.Run(config().Port)
