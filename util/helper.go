@@ -36,9 +36,9 @@ func GenTrackerNodeId() {
 
 //GenFilePath 生成文件路径
 func GenFilePath(paths ...string) (root string) {
-	var path string
+	var p string
 	if len(paths) > 0 {
-		path = paths[0]
+		p = paths[0]
 	}
 	cur := time.Now()
 	year, month, day := cur.Year(), cur.Month(), cur.Day()
@@ -46,8 +46,8 @@ func GenFilePath(paths ...string) (root string) {
 		strconv.Itoa(int(month)),
 		strconv.Itoa(day),
 	}, "/")
-	if path != "" {
-		root = root + "/" + path
+	if p != "" {
+		root = root + "/" + p
 	}
 	return root
 }
