@@ -4,7 +4,7 @@ import (
 	"crypto/md5"
 	"eggdfs/logger"
 	"eggdfs/svc/conf"
-	"fmt"
+	"encoding/hex"
 	"github.com/bwmarrin/snowflake"
 	"io"
 	"math/rand"
@@ -58,15 +58,14 @@ func GenFileUUID() string {
 }
 
 func GenFileName(id, fn string) (fileName string) {
-	return id + "." + path.Ext(fn)
+	return id + path.Ext(fn)
 }
 
 //GenFileMD5 生成文件md5 不适合大文件
-func GenFileMD5(file io.Reader) (string, error) {
+func GenFileMD5(file io.Reader) string {
 	md5h := md5.New()
 	if _, err := io.Copy(md5h, file); err != nil {
-		return "", err
+		return ""
 	}
-	md := md5h.Sum(nil)
-	return fmt.Sprintf("%x", md), nil
+	return hex.EncodeToString(md5h.Sum([]byte("")))
 }

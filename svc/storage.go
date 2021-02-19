@@ -8,6 +8,8 @@ import (
 	"eggdfs/util"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -22,36 +24,14 @@ func NewStorage() *Storage {
 
 func hello(c *gin.Context) {
 	c.JSON(http.StatusOK, model.RespResult{
-		Status:  200,
-		Message: "hello eggdfs!",
+		Status:  common.Success,
+		Message: "hello eggdfs storage!",
 		Data:    nil,
 	})
 }
 
-func simpleUpload(c *gin.Context) {
-	file, err := c.FormFile("file")
-	if err != nil {
-		c.JSON(http.StatusOK, model.RespResult{
-			Status:  common.FormFileNotFound,
-			Message: "参数解析失败",
-			Data:    err.Error(),
-		})
-	}
-	err = c.SaveUploadedFile(file, config().Storage.StorageDir)
-	if err != nil {
-		c.JSON(http.StatusOK, model.RespResult{
-			Status:  common.FileSaveFail,
-			Message: "文件保存失败",
-			Data:    err.Error(),
-		})
-	}
-	c.JSON(http.StatusOK, model.RespResult{
-		Status:  common.Success,
-		Message: "文件上传成功",
-	})
-}
-
-func (s *Storage) Upload(c *gin.Context) {
+//QuickUpload 适合小文件
+func (s *Storage) QuickUpload(c *gin.Context) {
 	//用户自定义的存储文件夹
 	customDir := c.GetHeader(common.HeaderUploadFileDir)
 	baseDir := config().Storage.StorageDir + "/" + util.GenFilePath(customDir)
@@ -93,8 +73,10 @@ func (s *Storage) Upload(c *gin.Context) {
 	}
 
 	//保存文件
-	fullPath := baseDir + "/" + util.GenFileName(c.GetHeader(common.HeaderUUIDFileName), file.Filename)
-	err = c.SaveUploadedFile(file, fullPath)
+	//文件名由雪花算法的服务器生成
+	uuidFilename := c.GetHeader(common.HeaderUUIDFileName)
+	fullPath := baseDir + "/" + util.GenFileName(uuidFilename, file.Filename)
+	md5hash, err := s.SaveQuickUploadedFile(file, fullPath)
 	if err != nil {
 		c.JSON(http.StatusOK, model.RespResult{
 			Status:  common.FileSaveFail,
@@ -105,15 +87,35 @@ func (s *Storage) Upload(c *gin.Context) {
 	}
 	fi := model.FileInfo{
 		Name:   file.Filename,
-		ReName: c.GetHeader(common.HeaderUUIDFileName),
+		ReName: uuidFilename,
 		Size:   file.Size,
 		Group:  config().Storage.Group,
+		Md5:    md5hash,
 	}
 	c.JSON(http.StatusOK, model.RespResult{
 		Status:  common.Success,
 		Message: "文件保存成功",
 		Data:    fi,
 	})
+}
+
+func (s *Storage) SaveQuickUploadedFile(file *multipart.FileHeader, dst string) (md5hash string, err error) {
+	src, err := file.Open()
+	if err != nil {
+		return
+	}
+	defer src.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return
+	}
+	defer out.Close()
+	_, err = io.Copy(out, src)
+	if err != nil {
+		return
+	}
+	md5hash = util.GenFileMD5(src)
+	return md5hash, nil
 }
 
 func (s *Storage) Start() {
@@ -136,7 +138,7 @@ func (s *Storage) Start() {
 	r.GET("/hello", hello)
 	r.Group("/v1")
 	{
-		r.POST("/upload", s.Upload)
+		r.POST("/upload", s.QuickUpload)
 	}
 
 	err := r.Run(config().Port)
