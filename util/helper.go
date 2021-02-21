@@ -1,13 +1,18 @@
 package util
 
 import (
+	"bytes"
+	"context"
 	"crypto/md5"
 	"eggdfs/logger"
 	"eggdfs/svc/conf"
 	"encoding/hex"
+	"encoding/json"
 	"github.com/bwmarrin/snowflake"
 	"io"
+	"io/ioutil"
 	"math/rand"
+	"net/http"
 	"path"
 	"strconv"
 	"strings"
@@ -68,4 +73,31 @@ func GenFileMD5(file io.Reader) string {
 		return ""
 	}
 	return hex.EncodeToString(md5h.Sum([]byte("")))
+}
+
+//HttpPost 发送http post请求
+func HttpPost(url string, data interface{}, header map[string]string, timeout time.Duration) (res []byte, err error) {
+	b, err := json.Marshal(data)
+	if err != nil {
+		return
+	}
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(b))
+	if err != nil {
+		return
+	}
+	if header != nil {
+		for k, v := range header {
+			req.Header.Set(k, v)
+		}
+	}
+	req.Header.Set("Content-Type", "application/json;charset=UTF-8")
+	client := http.DefaultClient
+	client.Timeout = timeout
+	resp, err := client.Do(req.WithContext(context.TODO()))
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	res, err = ioutil.ReadAll(resp.Body)
+	return res, err
 }

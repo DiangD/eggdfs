@@ -39,6 +39,8 @@ type GlobalConfig struct {
 func parseConfig() {
 	v := viper.New()
 	v.AddConfigPath(".")
+	v.AddConfigPath("..")
+	v.AddConfigPath("../../")
 	v.AddConfigPath("./config")
 	v.SetConfigName(defaultConfigFileName)
 	v.SetConfigType("json")

@@ -6,20 +6,39 @@ import (
 	"eggdfs/logger"
 	"eggdfs/svc/conf"
 	"eggdfs/util"
+	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/robfig/cron/v3"
+	"github.com/shirou/gopsutil/v3/disk"
 	"go.uber.org/zap"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
+)
+
+const (
+	storageDBFileName = "storage.db"
 )
 
 type Storage struct {
+	db *model.EggDB
+}
+
+type StorageStatus struct {
+	Group  string `json:"group"`
+	Host   string `json:"host"`
+	Port   string `json:"port"`
+	Free   uint64 `json:"free"`
+	Active bool   `json:"active"`
 }
 
 func NewStorage() *Storage {
-	return &Storage{}
+	return &Storage{
+		db: model.NewEggDB(storageDBFileName),
+	}
 }
 
 func hello(c *gin.Context) {
@@ -74,8 +93,9 @@ func (s *Storage) QuickUpload(c *gin.Context) {
 
 	//保存文件
 	//文件名由雪花算法的服务器生成
-	uuidFilename := c.GetHeader(common.HeaderUUIDFileName)
-	fullPath := baseDir + "/" + util.GenFileName(uuidFilename, file.Filename)
+	uuid := c.GetHeader(common.HeaderUUIDFileName)
+	fileName := util.GenFileName(uuid, file.Filename)
+	fullPath := baseDir + "/" + fileName
 	md5hash, err := s.SaveQuickUploadedFile(file, fullPath)
 	if err != nil {
 		c.JSON(http.StatusOK, model.RespResult{
@@ -86,11 +106,14 @@ func (s *Storage) QuickUpload(c *gin.Context) {
 		return
 	}
 	fi := model.FileInfo{
+		FileId: uuid,
 		Name:   file.Filename,
-		ReName: uuidFilename,
+		ReName: fileName,
+		Url:    "",
+		Path:   fullPath,
+		Md5:    md5hash,
 		Size:   file.Size,
 		Group:  config().Storage.Group,
-		Md5:    md5hash,
 	}
 	c.JSON(http.StatusOK, model.RespResult{
 		Status:  common.Success,
@@ -118,6 +141,51 @@ func (s *Storage) SaveQuickUploadedFile(file *multipart.FileHeader, dst string) 
 	return md5hash, nil
 }
 
+//Download 下载 example todo
+func (s *Storage) Download(c *gin.Context) {
+	c.Writer.Header().Add("Content-Disposition", fmt.Sprintf("attachment; filename=%s", "goland.exe")) //fmt.Sprintf("attachment; filename=%s", filename)对下载的文件重命名
+	c.Writer.Header().Add("Content-Type", "application/octet-stream")
+	c.File("meta/2021/2/20/2000212.exe")
+}
+
+//Status 向tracker回报状态
+func (s *Storage) Status() {
+	c := config()
+	status := &StorageStatus{
+		Group:  c.Storage.Group,
+		Host:   c.Host,
+		Port:   c.Port,
+		Active: true,
+	}
+	if stat, err := disk.Usage(c.Storage.StorageDir); err != nil {
+		status.Free = 0
+		status.Active = false
+	} else {
+		status.Free = stat.Free
+	}
+
+	for _, url := range c.Storage.Trackers {
+		go func(url string) {
+			_, _ = util.HttpPost(url+"/status", status, nil, time.Second)
+		}(url)
+	}
+}
+
+//startTimerTask 启动定时任务
+func (s *Storage) startTimerTask() error {
+	cr := cron.New(cron.WithSeconds())
+	//5s per
+	_, err := cr.AddFunc("*/5 * * * * *", func() {
+		s.Status()
+	})
+	if err != nil {
+		return err
+	}
+	cr.Start()
+	return nil
+}
+
+//Start 启动Storage服务
 func (s *Storage) Start() {
 	sd := config().Storage.StorageDir
 	if _, err := os.Stat(sd); err != nil {
@@ -136,9 +204,15 @@ func (s *Storage) Start() {
 	r.StaticFS(conf.Config().Storage.Group+"/static", http.Dir(config().Storage.StorageDir))
 
 	r.GET("/hello", hello)
+	r.GET("/download", s.Download)
 	r.Group("/v1")
 	{
 		r.POST("/upload", s.QuickUpload)
+	}
+
+	//开启定时任务
+	if err := s.startTimerTask(); err != nil {
+		logger.Panic("Storage定时任务启动失败", zap.String("addr", config().Host))
 	}
 
 	err := r.Run(config().Port)
