@@ -16,15 +16,15 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 )
 
 const (
-	storageDBFileName = "storage.db"
+	storageDBFileName = "storage"
 )
 
 type Storage struct {
-	db *model.EggDB
+	db       *model.EggDB
+	trackers []string
 }
 
 type StorageStatus struct {
@@ -37,7 +37,8 @@ type StorageStatus struct {
 
 func NewStorage() *Storage {
 	return &Storage{
-		db: model.NewEggDB(storageDBFileName),
+		db:       model.NewEggDB(storageDBFileName),
+		trackers: config().Storage.Trackers,
 	}
 }
 
@@ -53,7 +54,8 @@ func hello(c *gin.Context) {
 func (s *Storage) QuickUpload(c *gin.Context) {
 	//用户自定义的存储文件夹
 	customDir := c.GetHeader(common.HeaderUploadFileDir)
-	baseDir := config().Storage.StorageDir + "/" + util.GenFilePath(customDir)
+	path := util.GenFilePath(customDir)
+	baseDir := config().Storage.StorageDir + "/" + path
 	if _, err := os.Stat(baseDir); err != nil {
 		err := os.MkdirAll(baseDir, os.ModePerm)
 		path, _ := filepath.Abs(config().Storage.StorageDir)
@@ -110,7 +112,7 @@ func (s *Storage) QuickUpload(c *gin.Context) {
 		Name:   file.Filename,
 		ReName: fileName,
 		Url:    "",
-		Path:   fullPath,
+		Path:   fmt.Sprintf("%s/%s", path, fileName),
 		Md5:    md5hash,
 		Size:   file.Size,
 		Group:  config().Storage.Group,
@@ -164,9 +166,10 @@ func (s *Storage) Status() {
 		status.Free = stat.Free
 	}
 
-	for _, url := range c.Storage.Trackers {
+	for _, url := range s.trackers {
 		go func(url string) {
-			_, _ = util.HttpPost(url+"/status", status, nil, time.Second)
+			logger.Info("report to tracker", zap.String("tracker", url), zap.String("host", c.Host))
+			//_, _ = util.HttpPost(url+"/status", status, nil, time.Second)
 		}(url)
 	}
 }

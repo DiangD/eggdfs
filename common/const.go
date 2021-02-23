@@ -1,5 +1,6 @@
 package common
 
+//部署方式
 const (
 	DeployTypeStorages = "storage"
 	DeployTypeTracker  = "tracker"
@@ -19,4 +20,17 @@ const (
 const (
 	HeaderUploadFileDir = "Egg-Dfs-FileDir"
 	HeaderUUIDFileName  = "Egg-Dfs-FileName"
+)
+
+//group状态标识
+const (
+	GroupUnavailable = iota
+	GroupActive
+)
+
+//storage状态标识
+const (
+	StorageOffline = iota
+	StorageActive
+	StorageNotEnoughSpace
 )

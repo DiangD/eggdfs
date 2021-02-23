@@ -59,3 +59,7 @@ func (db *EggDB) Put(key string, value []byte) error {
 	err := db.Ldb.Put([]byte(key), value, nil)
 	return err
 }
+
+func (db *EggDB) IsExistKey(key string) (bool, error) {
+	return db.Ldb.Has([]byte(key), nil)
+}
