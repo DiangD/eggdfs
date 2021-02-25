@@ -28,11 +28,10 @@ type Storage struct {
 }
 
 type StorageStatus struct {
-	Group  string `json:"group"`
-	Host   string `json:"host"`
-	Port   string `json:"port"`
-	Free   uint64 `json:"free"`
-	Active bool   `json:"active"`
+	Group string `json:"group"`
+	Host  string `json:"host"`
+	Port  string `json:"port"`
+	Free  uint64 `json:"free"`
 }
 
 func NewStorage() *Storage {
@@ -154,14 +153,12 @@ func (s *Storage) Download(c *gin.Context) {
 func (s *Storage) Status() {
 	c := config()
 	status := &StorageStatus{
-		Group:  c.Storage.Group,
-		Host:   c.Host,
-		Port:   c.Port,
-		Active: true,
+		Group: c.Storage.Group,
+		Host:  c.Host,
+		Port:  c.Port,
 	}
 	if stat, err := disk.Usage(c.Storage.StorageDir); err != nil {
 		status.Free = 0
-		status.Active = false
 	} else {
 		status.Free = stat.Free
 	}
@@ -218,7 +215,7 @@ func (s *Storage) Start() {
 		logger.Panic("Storage定时任务启动失败", zap.String("addr", config().Host))
 	}
 
-	err := r.Run(config().Port)
+	err := r.Run(":" + config().Port)
 	if err != nil {
 		logger.Panic("Storage服务启动失败", zap.String("addr", config().Host))
 	}
