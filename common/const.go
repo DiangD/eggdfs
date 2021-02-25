@@ -1,5 +1,7 @@
 package common
 
+const VERSION = "1.0.0"
+
 //部署方式
 const (
 	DeployTypeStorages = "storage"
