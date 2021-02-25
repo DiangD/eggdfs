@@ -1,8 +1,8 @@
 {
   "env": "debug",
   "deploy_type": "storage",
-  "port": ":8081",
-  "host": "localhost:8081",
+  "port": "8081",
+  "host": "localhost",
   "log_dir": "./log/zap.log",
   "tracker": {
     "node_id": "1",
