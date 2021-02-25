@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 const (
@@ -94,7 +95,7 @@ func (s *Storage) QuickUpload(c *gin.Context) {
 
 	//保存文件
 	//文件名由雪花算法的服务器生成
-	uuid := c.GetHeader(common.HeaderUUIDFileName)
+	uuid := c.GetHeader(common.HeaderFileUUID)
 	fileName := util.GenFileName(uuid, file.Filename)
 	fullPath := baseDir + "/" + fileName
 	md5hash, err := s.SaveQuickUploadedFile(file, fullPath)
@@ -166,7 +167,7 @@ func (s *Storage) Status() {
 	for _, url := range s.trackers {
 		go func(url string) {
 			logger.Info("report to tracker", zap.String("tracker", url), zap.String("host", c.Host))
-			//_, _ = util.HttpPost(url+"/status", status, nil, time.Second)
+			_, _ = util.HttpPost(url+"/status", status, nil, time.Second)
 		}(url)
 	}
 }

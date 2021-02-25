@@ -16,6 +16,7 @@ var configPtr unsafe.Pointer
 type GlobalConfig struct {
 	Env        string `mapstructure:"env"`
 	DeployType string `mapstructure:"deploy_type"`
+	HttpSchema string `mapstructure:"http_schema"`
 	Host       string `mapstructure:"host"`
 	Port       string `mapstructure:"port"`
 	LogDir     string `mapstructure:"log_dir"`

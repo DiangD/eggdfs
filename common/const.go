@@ -10,7 +10,10 @@ const (
 
 //返回码
 const (
+	//common
 	Success = 20000 + iota
+
+	Fail = 10000 + iota
 
 	DirCreateFail = 40000 + iota
 	FormFileNotFound
@@ -21,7 +24,7 @@ const (
 //http请求头
 const (
 	HeaderUploadFileDir = "Egg-Dfs-FileDir"
-	HeaderUUIDFileName  = "Egg-Dfs-FileName"
+	HeaderFileUUID      = "Egg-Dfs-FileUUID"
 )
 
 //group状态标识
