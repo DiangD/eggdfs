@@ -10,16 +10,13 @@ import (
 抽象出代理类
 */
 
-type Proxy interface {
-	HttpProxy(w http.ResponseWriter, r *http.Request) error
-}
-
 type TrackerProxy struct {
 	Schema string
 	Addr   string
 	Target string
 }
 
+//NewTrackerProxy 构造函数
 func NewTrackerProxy(schema string, addr string) *TrackerProxy {
 	return &TrackerProxy{
 		Schema: schema,
