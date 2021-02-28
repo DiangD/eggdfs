@@ -7,10 +7,10 @@ import (
 )
 
 type Group struct {
-	Name     string                   `json:"name"`
-	Status   int                      `json:"status"`
-	Cap      uint64                   `json:"cap"`
-	Storages map[string]StorageServer `json:"storages"`
+	Name     string                    `json:"name"`
+	Status   int                       `json:"status"`
+	Cap      uint64                    `json:"cap"`
+	Storages map[string]*StorageServer `json:"storages"`
 	mu       sync.RWMutex
 }
 
@@ -23,11 +23,11 @@ type StorageServer struct {
 }
 
 //GetStorages 获取注册的storage节点 map无法保证顺序
-func (g *Group) GetStorages() []StorageServer {
+func (g *Group) GetStorages() []*StorageServer {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	keys := make([]string, 0)
-	servers := make([]StorageServer, 0)
+	servers := make([]*StorageServer, 0)
 	for _, server := range g.Storages {
 		keys = append(keys, server.Addr)
 	}
@@ -39,8 +39,17 @@ func (g *Group) GetStorages() []StorageServer {
 	return servers
 }
 
+func (g *Group) GetStorage(addr string) *StorageServer {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	if val, ok := g.Storages[addr]; ok {
+		return val
+	}
+	return nil
+}
+
 //RegisterStorage 注册storage节点
-func (g *Group) RegisterStorage(s StorageServer) error {
+func (g *Group) RegisterStorage(s *StorageServer) error {
 	if s.Addr == "" {
 		return errors.New("storage addr can not be nil")
 	}
@@ -53,7 +62,7 @@ func (g *Group) RegisterStorage(s StorageServer) error {
 }
 
 //RemoveStorage 移除storage节点
-func (g *Group) RemoveStorage(s StorageServer) error {
+func (g *Group) RemoveStorage(s *StorageServer) error {
 	if s.Addr == "" {
 		return errors.New("storage addr can not be nil")
 	}
@@ -64,7 +73,7 @@ func (g *Group) RemoveStorage(s StorageServer) error {
 }
 
 //UpdateStorage 更新storage节点
-func (g *Group) UpdateStorage(s StorageServer) error {
+func (g *Group) UpdateStorage(s *StorageServer) error {
 	if s.Addr == "" {
 		return errors.New("storage addr can not be nil")
 	}
@@ -86,7 +95,7 @@ func (g *Group) IsExistStorage(s StorageServer) bool {
 }
 
 //SaveOrUpdateStorage 注册或更新storage节点
-func (g *Group) SaveOrUpdateStorage(s StorageServer) error {
+func (g *Group) SaveOrUpdateStorage(s *StorageServer) error {
 	if s.Addr == "" {
 		return errors.New("storage addr can not be nil")
 	}

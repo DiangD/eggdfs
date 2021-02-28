@@ -13,8 +13,11 @@ const (
 	//common
 	Success = 20000 + iota
 
-	Fail = 10000 + iota
+	Fail = 10000
+)
 
+//error code
+const (
 	DirCreateFail = 40000 + iota
 	FormFileNotFound
 	FileSizeExceeded

@@ -5,7 +5,6 @@ import (
 	"eggdfs/common/model"
 	"eggdfs/logger"
 	"eggdfs/util"
-	"eggdfs/util/proxy"
 	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron/v3"
@@ -21,7 +20,7 @@ import (
 type Hash func([]byte) uint32
 
 type Tracker struct {
-	groups map[string]Group
+	groups map[string]*Group
 	db     *model.EggDB
 	hash   Hash
 	mu     sync.RWMutex //考虑线程安全
@@ -30,7 +29,7 @@ type Tracker struct {
 //NewTracker 构造函数可使用自定义的hash
 func NewTracker(fn Hash) *Tracker {
 	t := &Tracker{
-		groups: make(map[string]Group),
+		groups: make(map[string]*Group),
 		db:     model.NewEggDB("tracker"),
 		hash:   fn,
 	}
@@ -82,7 +81,7 @@ func (t *Tracker) StorageStatusReport(c *gin.Context) {
 		return
 	}
 
-	sm := StorageServer{
+	sm := &StorageServer{
 		Group:      params.Group,
 		Addr:       net.JoinHostPort(params.Host, params.Port),
 		Free:       params.Free,
@@ -92,11 +91,11 @@ func (t *Tracker) StorageStatusReport(c *gin.Context) {
 
 	//group未注册
 	if !t.IsExistGroup(sm.Group) {
-		group := Group{
+		group := &Group{
 			Name:     sm.Group,
 			Status:   common.GroupActive,
 			Cap:      sm.Free,
-			Storages: make(map[string]StorageServer),
+			Storages: make(map[string]*StorageServer),
 		}
 		_ = group.SaveOrUpdateStorage(sm)
 		_ = t.RegisterGroup(group)
@@ -112,15 +111,15 @@ func (t *Tracker) StorageStatusReport(c *gin.Context) {
 }
 
 //SelectStorageIPHash ip hash选择storage
-func (t *Tracker) SelectStorageIPHash(ip string, g *Group) (s StorageServer, err error) {
-	as := make([]StorageServer, 0)
+func (t *Tracker) SelectStorageIPHash(ip string, g *Group) (s *StorageServer, err error) {
+	as := make([]*StorageServer, 0)
 	for _, g := range g.GetStorages() {
 		if g.Status == common.StorageActive {
 			as = append(as, g)
 		}
 	}
 	if len(as) == 0 {
-		return StorageServer{}, errors.New("no available storage for group")
+		return nil, errors.New("no available storage for group")
 	}
 	//ip hash
 	hashcode := int(t.hash([]byte(ip)))
@@ -134,7 +133,7 @@ func (t *Tracker) IsExistGroup(groupName string) bool {
 }
 
 //RegisterGroup 注册group
-func (t *Tracker) RegisterGroup(g Group) error {
+func (t *Tracker) RegisterGroup(g *Group) error {
 	if g.Name == "" {
 		return errors.New("group name can not be nil")
 	}
@@ -145,15 +144,15 @@ func (t *Tracker) RegisterGroup(g Group) error {
 }
 
 //SelectGroupForUpload 选择上传的group
-func (t *Tracker) SelectGroupForUpload() (Group, error) {
-	gs := make([]Group, 0)
+func (t *Tracker) SelectGroupForUpload() (*Group, error) {
+	gs := make([]*Group, 0)
 	for _, g := range t.groups {
 		if g.Status == common.GroupActive {
 			gs = append(gs, g)
 		}
 	}
 	if len(gs) == 0 {
-		return Group{}, errors.New("no available group")
+		return nil, errors.New("no available group")
 	}
 
 	//按容量降序
@@ -176,7 +175,7 @@ func (t *Tracker) QuickUpload(c *gin.Context) {
 		return
 	}
 	//获取storage
-	s, err := t.SelectStorageIPHash(c.ClientIP(), &group)
+	s, err := t.SelectStorageIPHash(c.ClientIP(), group)
 	if err != nil {
 		logger.Error(err.Error())
 		c.JSON(http.StatusOK, model.RespResult{
@@ -190,7 +189,7 @@ func (t *Tracker) QuickUpload(c *gin.Context) {
 	c.Request.Header.Set(common.HeaderFileUUID, util.GenFileUUID())
 
 	//反向代理
-	p := proxy.NewTrackerProxy(config().HttpSchema, s.Addr)
+	p := NewTrackerProxy(config().HttpSchema, s.Addr, c.ClientIP(), group.Name, t)
 	if err = t.httpProxy(p, c); err != nil {
 		logger.Error(err.Error())
 		c.JSON(http.StatusOK, model.RespResult{
@@ -202,6 +201,7 @@ func (t *Tracker) QuickUpload(c *gin.Context) {
 
 }
 
-func (t *Tracker) httpProxy(tp *proxy.TrackerProxy, c *gin.Context) error {
-	return tp.HttpProxy(c.Writer, c.Request)
+//httpProxy tracker 反向代理 //todo 处理502请求
+func (t *Tracker) httpProxy(tp *TrackerProxy, c *gin.Context) error {
+	return tp.HttpProxy(c.Writer, c.Request, tp.AbortErrorHandler)
 }
