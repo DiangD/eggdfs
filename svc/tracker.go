@@ -128,6 +128,8 @@ func (t *Tracker) SelectStorageIPHash(ip string, g *Group) (s *StorageServer, er
 
 //IsExistGroup group是否注册
 func (t *Tracker) IsExistGroup(groupName string) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	_, ok := t.groups[groupName]
 	return ok
 }
@@ -137,6 +139,8 @@ func (t *Tracker) RegisterGroup(g *Group) error {
 	if g.Name == "" {
 		return errors.New("group name can not be nil")
 	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if _, ok := t.groups[g.Name]; !ok {
 		t.groups[g.Name] = g
 	}
@@ -146,11 +150,13 @@ func (t *Tracker) RegisterGroup(g *Group) error {
 //SelectGroupForUpload 选择上传的group
 func (t *Tracker) SelectGroupForUpload() (*Group, error) {
 	gs := make([]*Group, 0)
+	t.mu.RLock()
 	for _, g := range t.groups {
 		if g.Status == common.GroupActive {
 			gs = append(gs, g)
 		}
 	}
+	t.mu.RUnlock()
 	if len(gs) == 0 {
 		return nil, errors.New("no available group")
 	}

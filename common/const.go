@@ -22,6 +22,7 @@ const (
 	FormFileNotFound
 	FileSizeExceeded
 	FileSaveFail
+	ProxyBadGateWay
 )
 
 //http请求头

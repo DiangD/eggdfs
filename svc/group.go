@@ -31,7 +31,7 @@ func (g *Group) GetStorages() []*StorageServer {
 	for _, server := range g.Storages {
 		keys = append(keys, server.Addr)
 	}
-	//按addr排序
+	//按addr排序 todo 更有效的解决方法
 	sort.Strings(keys)
 	for _, key := range keys {
 		servers = append(servers, g.Storages[key])

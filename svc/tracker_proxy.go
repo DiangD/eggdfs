@@ -11,6 +11,7 @@ import (
 )
 
 /**
+//todo 需要重构整个代理实现
 抽象出代理类
 */
 
@@ -36,7 +37,7 @@ func NewTrackerProxy(schema, addr, clientIP, group string, tracker *Tracker) *Tr
 	return t
 }
 
-//HttpProxy tracker请求的反向代理 todo
+//HttpProxy tracker请求的反向代理
 func (tp *TrackerProxy) HttpProxy(w http.ResponseWriter, r *http.Request, handler proxy.ErrorHandler) error {
 	remote, err := url.Parse(tp.Target)
 	if err != nil {
@@ -62,7 +63,7 @@ func (tp *TrackerProxy) AbortErrorHandler(w http.ResponseWriter, req *http.Reque
 	s.Status = common.StorageOffline
 
 	res := model.RespResult{
-		Status:  common.Fail,
+		Status:  common.ProxyBadGateWay,
 		Message: err.Error(),
 	}
 	bytes, _ := json.Marshal(res)
