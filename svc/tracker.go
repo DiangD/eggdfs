@@ -207,7 +207,7 @@ func (t *Tracker) QuickUpload(c *gin.Context) {
 
 }
 
-//httpProxy tracker 反向代理 //todo 处理502请求
+//httpProxy tracker 反向代理 //todo 处理502请求2 redo proxy
 func (t *Tracker) httpProxy(tp *TrackerProxy, c *gin.Context) error {
 	return tp.HttpProxy(c.Writer, c.Request, tp.AbortErrorHandler)
 }

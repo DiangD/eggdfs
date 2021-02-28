@@ -58,6 +58,7 @@ func (tp *TrackerProxy) HttpProxy(w http.ResponseWriter, r *http.Request, handle
 	return nil
 }
 
+//AbortErrorHandler 错误处理机制，直接返回
 func (tp *TrackerProxy) AbortErrorHandler(w http.ResponseWriter, req *http.Request, err error) {
 	s := tp.tracker.groups[tp.Group].GetStorage(req.Host)
 	s.Status = common.StorageOffline
