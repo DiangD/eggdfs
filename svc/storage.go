@@ -66,7 +66,7 @@ func (s *Storage) QuickUpload(c *gin.Context) {
 			_ = json.Unmarshal(data, &fi)
 			c.JSON(http.StatusOK, model.RespResult{
 				Status:  common.Success,
-				Message: "文件已存在，妙传成功",
+				Message: "文件已存在，秒传成功",
 				Data:    fi,
 			})
 			return
