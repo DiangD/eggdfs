@@ -23,12 +23,15 @@ const (
 	FileSizeExceeded
 	FileSaveFail
 	ProxyBadGateWay
+	FileDamaged
 )
 
 //http请求头
 const (
 	HeaderUploadFileDir = "Egg-Dfs-FileDir"
 	HeaderFileUUID      = "Egg-Dfs-FileUUID"
+	HeaderFileUploadRes = "Egg-Dfs-Upload-Res"
+	HeaderFileHash      = "Egg-Dfs-FIle-Hash"
 )
 
 //group状态标识
@@ -42,4 +45,9 @@ const (
 	StorageOffline = iota
 	StorageActive
 	StorageNotEnoughSpace
+)
+
+const (
+	SyncAdd    = "ADD"
+	SyncDelete = "DELETE"
 )
