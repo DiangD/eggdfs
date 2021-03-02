@@ -5,6 +5,7 @@ import (
 	"eggdfs/common/model"
 	"eggdfs/logger"
 	"eggdfs/util"
+	"encoding/json"
 	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron/v3"
@@ -13,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -23,7 +25,8 @@ type Tracker struct {
 	groups map[string]*Group
 	db     *model.EggDB
 	hash   Hash
-	mu     sync.RWMutex //考虑线程安全
+	mu     sync.RWMutex //map mutex
+	lock   sync.Mutex   //process mutex
 }
 
 //NewTracker 构造函数可使用自定义的hash
@@ -67,28 +70,42 @@ func (t *Tracker) startTrackerTimerTask() error {
 //StorageStatusReport 处理storage回报的信息
 func (t *Tracker) StorageStatusReport(c *gin.Context) {
 	var params struct {
-		Group string `json:"group" binding:"required"`
-		Host  string `json:"host" binding:"required"`
-		Port  string `json:"port" binding:"required"`
-		Free  uint64 `json:"free" binding:"required"`
+		Group      string `json:"group" binding:"required"`
+		HttpSchema string `json:"http_schema" binding:"required"`
+		Host       string `json:"host" binding:"required"`
+		Port       string `json:"port" binding:"required"`
+		Free       uint64 `json:"free" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&params); err != nil {
 		logger.Error("param binding fail", zap.String("url", "/status"))
 	}
-
+	//nil addr
 	if params.Port == "" || params.Host == "" {
 		logger.Error("nil addr", zap.String("url", "/status"))
 		return
 	}
 
+	//nil group
+	if params.Group == "" {
+		logger.Error("nil group", zap.String("group", "/status"))
+		return
+	}
+
 	sm := &StorageServer{
 		Group:      params.Group,
+		HttpSchema: params.HttpSchema,
 		Addr:       net.JoinHostPort(params.Host, params.Port),
 		Free:       params.Free,
 		Status:     common.StorageActive,
 		UpdateTime: time.Now().Unix(),
 	}
+	//储存空间阈值 //todo
+	if sm.Free <= 100000 {
+		return
+	}
 
+	t.lock.Lock()
+	//防止重复注册，覆盖注册的情况
 	//group未注册
 	if !t.IsExistGroup(sm.Group) {
 		group := &Group{
@@ -102,12 +119,16 @@ func (t *Tracker) StorageStatusReport(c *gin.Context) {
 	}
 
 	//group已注册
-	group := t.groups[sm.Group]
-	if err := group.SaveOrUpdateStorage(sm); err != nil {
+	//todo 思路：应该先添加storage还是先计算cap... 逻辑：是否及时计算cap，以及group状态
+	group := t.GetGroup(sm.Group)
+	if group == nil {
+		return
+	}
+	if err := group.SaveOrUpdateStorage(sm); err == nil {
 		group.Cap = group.GetGroupCap()
 	}
+	t.lock.Unlock()
 	logger.Info("tracker group details", zap.Any("groups", t.groups))
-	//todo 思路：应该先添加storage还是先计算cap... 逻辑：是否及时计算cap，以及group状态
 }
 
 //SelectStorageIPHash ip hash选择storage
@@ -124,6 +145,13 @@ func (t *Tracker) SelectStorageIPHash(ip string, g *Group) (s *StorageServer, er
 	//ip hash
 	hashcode := int(t.hash([]byte(ip)))
 	return as[hashcode%len(as)], err
+}
+
+//GetGroup group name 获取group
+func (t *Tracker) GetGroup(name string) *Group {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.groups[name]
 }
 
 //IsExistGroup group是否注册
@@ -169,6 +197,7 @@ func (t *Tracker) SelectGroupForUpload() (*Group, error) {
 	return gs[0], nil
 }
 
+//QuickUpload 小文件快传
 func (t *Tracker) QuickUpload(c *gin.Context) {
 	//获取group
 	group, err := t.SelectGroupForUpload()
@@ -192,10 +221,11 @@ func (t *Tracker) QuickUpload(c *gin.Context) {
 	}
 
 	//set header
-	c.Request.Header.Set(common.HeaderFileUUID, util.GenFileUUID())
+	uuid := util.GenFileUUID()
+	c.Request.Header.Set(common.HeaderFileUUID, uuid)
 
 	//反向代理
-	p := NewTrackerProxy(config().HttpSchema, s.Addr, c.ClientIP(), group.Name, t)
+	p := NewTrackerProxy(config().HttpSchema, s.Addr, group.Name, t, c)
 	if err = t.httpProxy(p, c); err != nil {
 		logger.Error(err.Error())
 		c.JSON(http.StatusOK, model.RespResult{
@@ -205,9 +235,65 @@ func (t *Tracker) QuickUpload(c *gin.Context) {
 		return
 	}
 
+	//文件同步
+	if c.Writer.Header().Get(common.HeaderFileUploadRes) == strconv.Itoa(common.Success) {
+		fullPath := c.Writer.Header().Get(common.HeaderFilePath)
+		hash := c.Writer.Header().Get(common.HeaderFileHash)
+		filePath, filename := util.ParseHeaderFilePath(fullPath)
+		storages := t.groups[group.Name].GetStorages()
+		for i := 0; i < len(storages); i++ {
+			server := storages[i]
+			if server.Addr == s.Addr {
+				continue
+			}
+			go func(*StorageServer) {
+				info := model.SyncFileInfo{
+					Src:      s.HttpSchema + "://" + s.Addr,
+					Dst:      server.HttpSchema + "://" + server.Addr,
+					FileId:   uuid,
+					FilePath: filePath,
+					FileName: filename,
+					FileHash: hash,
+					Action:   common.SyncAdd,
+					Group:    group.Name,
+				}
+				logger.Info("sync-file info", zap.Any("info", info))
+				t.SyncFile(server, info)
+			}(server)
+		}
+	}
 }
 
 //httpProxy tracker 反向代理 //todo 处理502请求2 redo proxy
 func (t *Tracker) httpProxy(tp *TrackerProxy, c *gin.Context) error {
 	return tp.HttpProxy(c.Writer, c.Request, tp.AbortErrorHandler)
+}
+
+//SyncFile 同步函数 todo
+func (t *Tracker) SyncFile(sm *StorageServer, sync model.SyncFileInfo) {
+	data, err := json.Marshal(sync)
+	if err != nil {
+		return
+	}
+	if sm.Status != common.StorageActive {
+		_ = t.db.Put(sync.FileId+"@"+sync.Action, data)
+		return
+	}
+	url := sm.HttpSchema + "://" + sm.Addr + "/sync"
+	//在大文件下这个方法完全不可行
+	resp, err := util.HttpPost(url, sync, nil, time.Second*30)
+	if err != nil || len(resp) == 0 {
+		_ = t.db.Put(sync.FileId+"@"+sync.Action, data)
+		return
+	}
+	var res model.RespResult
+	err = json.Unmarshal(resp, &res)
+	if err != nil {
+		_ = t.db.Put(sync.FileId+"@"+sync.Action, data)
+		return
+	}
+	if res.Status != common.Success {
+		_ = t.db.Put(sync.FileId+"@"+sync.Action, data)
+		return
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"eggdfs/common/model"
 	"eggdfs/svc/proxy"
 	"encoding/json"
+	"github.com/gin-gonic/gin"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -17,22 +18,22 @@ import (
 
 type TrackerProxy struct {
 	proxy.Entity
-	Group    string
-	ClientIP string
-	tracker  *Tracker
+	Group   string
+	tracker *Tracker
+	c       *gin.Context
 }
 
 //NewTrackerProxy 构造函数
-func NewTrackerProxy(schema, addr, clientIP, group string, tracker *Tracker) *TrackerProxy {
+func NewTrackerProxy(schema, addr, group string, tracker *Tracker, c *gin.Context) *TrackerProxy {
 	t := &TrackerProxy{
-		Group:    group,
-		tracker:  tracker,
-		ClientIP: clientIP,
+		Group:   group,
+		tracker: tracker,
 		Entity: proxy.Entity{
 			Schema: schema,
 			Addr:   addr,
 			Target: schema + "://" + addr,
 		},
+		c: c,
 	}
 	return t
 }
@@ -60,8 +61,8 @@ func (tp *TrackerProxy) HttpProxy(w http.ResponseWriter, r *http.Request, handle
 
 //AbortErrorHandler 错误处理机制，直接返回
 func (tp *TrackerProxy) AbortErrorHandler(w http.ResponseWriter, req *http.Request, err error) {
-	s := tp.tracker.groups[tp.Group].GetStorage(req.Host)
-	s.Status = common.StorageOffline
+	group := tp.tracker.GetGroup(tp.Group)
+	group.GetStorage(tp.Addr).Status = common.StorageOffline
 
 	res := model.RespResult{
 		Status:  common.ProxyBadGateWay,

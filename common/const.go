@@ -23,7 +23,7 @@ const (
 	FileSizeExceeded
 	FileSaveFail
 	ProxyBadGateWay
-	FileDamaged
+	FileCheckSumFail
 )
 
 //http请求头
@@ -32,6 +32,7 @@ const (
 	HeaderFileUUID      = "Egg-Dfs-FileUUID"
 	HeaderFileUploadRes = "Egg-Dfs-Upload-Res"
 	HeaderFileHash      = "Egg-Dfs-FIle-Hash"
+	HeaderFilePath      = "Egg-Dfs-FIle-Path"
 )
 
 //group状态标识

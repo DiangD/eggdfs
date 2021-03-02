@@ -16,6 +16,7 @@ type Group struct {
 
 type StorageServer struct {
 	Group      string `json:"group"`
+	HttpSchema string `json:"http_schema"`
 	Addr       string `json:"addr"`
 	Status     int    `json:"status"`
 	Free       uint64 `json:"free"`

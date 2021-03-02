@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -27,21 +28,24 @@ const (
 )
 
 type Storage struct {
-	db       *model.EggDB
-	trackers []string
+	db         *model.EggDB
+	httpSchema string
+	trackers   []string
 }
 
 type StorageStatus struct {
-	Group string `json:"group"`
-	Host  string `json:"host"`
-	Port  string `json:"port"`
-	Free  uint64 `json:"free"`
+	Group      string `json:"group"`
+	HttpSchema string `json:"http_schema"`
+	Host       string `json:"host"`
+	Port       string `json:"port"`
+	Free       uint64 `json:"free"`
 }
 
 func NewStorage() *Storage {
 	return &Storage{
-		db:       model.NewEggDB(storageDBFileName),
-		trackers: config().Storage.Trackers,
+		db:         model.NewEggDB(storageDBFileName),
+		httpSchema: config().HttpSchema,
+		trackers:   config().Storage.Trackers,
 	}
 }
 
@@ -131,7 +135,7 @@ func (s *Storage) QuickUpload(c *gin.Context) {
 		FileId: uuid,
 		Name:   file.Filename,
 		ReName: fileName,
-		Url:    "",
+		Url:    s.GenFileStaticUrl(path, fileName),
 		Path:   fmt.Sprintf("%s/%s", path, fileName),
 		Md5:    md5hash,
 		Size:   file.Size,
@@ -140,6 +144,8 @@ func (s *Storage) QuickUpload(c *gin.Context) {
 	bytes, _ := json.Marshal(fi)
 	_ = s.db.Put(fi.Md5, bytes)
 	c.Writer.Header().Set(common.HeaderFileUploadRes, strconv.Itoa(common.Success))
+	c.Writer.Header().Set(common.HeaderFileHash, fi.Md5)
+	c.Writer.Header().Set(common.HeaderFilePath, path+"/"+fileName)
 	c.JSON(http.StatusOK, model.RespResult{
 		Status:  common.Success,
 		Message: "文件保存成功",
@@ -147,25 +153,36 @@ func (s *Storage) QuickUpload(c *gin.Context) {
 	})
 }
 
+//GenFileStaticUrl 生成文件url
+func (s *Storage) GenFileStaticUrl(basePath, filename string) (url string) {
+	c := config()
+	path := basePath + "/" + filename
+	//todo domain域名
+	url = fmt.Sprintf("%s://%s/%s/%s", s.httpSchema, net.JoinHostPort(c.Host, c.Port), c.Storage.Group, path)
+	return
+}
+
+//SaveQuickUploadedFile 保存快传文件
 func (s *Storage) SaveQuickUploadedFile(file *multipart.FileHeader, dst string, hash string) (md5hash string, err error) {
 	src, err := file.Open()
 	if err != nil {
-		return
-	}
-	defer src.Close()
-	md5hash = util.GenMD5(src)
-	//检查文件完整性
-	if hash != md5hash && hash != "" {
-		err = errors.New("file is already damaged")
 		return
 	}
 	out, err := os.Create(dst)
 	if err != nil {
 		return
 	}
+	defer src.Close()
 	defer out.Close()
 	_, err = io.Copy(out, src)
 	if err != nil {
+		return
+	}
+	//检查文件完整性
+	md5hash, _ = util.GenMD5(src)
+	if hash != md5hash && hash != "" {
+		go os.Remove(dst)
+		err = errors.New("file is already damaged")
 		return
 	}
 	return md5hash, nil
@@ -182,9 +199,10 @@ func (s *Storage) Download(c *gin.Context) {
 func (s *Storage) Status() {
 	c := config()
 	status := &StorageStatus{
-		Group: c.Storage.Group,
-		Host:  c.Host,
-		Port:  c.Port,
+		Group:      c.Storage.Group,
+		HttpSchema: s.httpSchema,
+		Host:       c.Host,
+		Port:       c.Port,
 	}
 	if stat, err := disk.Usage(c.Storage.StorageDir); err != nil {
 		status.Free = 0
@@ -223,7 +241,7 @@ func (s *Storage) Sync(c *gin.Context) {
 type SyncFunc func(model.SyncFileInfo, *gin.Context)
 
 func (s *Storage) SyncFileAdd(sync model.SyncFileInfo, c *gin.Context) {
-	base := config().Storage.StorageDir + sync.FilePath
+	base := config().Storage.StorageDir + "/" + sync.FilePath
 	if _, err := os.Stat(base); err != nil {
 		err := os.MkdirAll(base, os.ModePerm)
 		if err != nil {
@@ -231,32 +249,59 @@ func (s *Storage) SyncFileAdd(sync model.SyncFileInfo, c *gin.Context) {
 			c.JSON(http.StatusOK, model.RespResult{
 				Status: common.Fail,
 			})
+			return
 		}
 	}
 
 	//download file
-	resp, err := http.Get(fmt.Sprintf("%s/%s/%s", sync.Src, sync.Group, sync.FileName))
+	url := fmt.Sprintf("%s/%s/%s/%s", sync.Src, sync.Group, sync.FilePath, sync.FileName)
+	logger.Info("sync-add:url", zap.String("url", url))
+	resp, err := http.Get(url)
 	if err != nil {
 		c.JSON(http.StatusOK, model.RespResult{
 			Status: common.Fail,
 		})
+		return
 	}
-	f, err := os.Create(base + sync.FileName)
+	//if resp != nil {
+	//	//检查校验和
+	//	md5hash, _ := util.GenMD5(resp.Body)
+	//	if md5hash != sync.FileHash && sync.FileHash != "" {
+	//		//report todo
+	//		return
+	//	}
+	//}
+	fullPath := base + "/" + sync.FileName
+	f, err := os.Create(fullPath)
 	if err != nil {
 		//todo report to tracker
 		c.JSON(http.StatusOK, model.RespResult{
-			Status: common.Fail,
+			Status: common.DirCreateFail,
 		})
+		return
 	}
 	l, err := io.Copy(f, resp.Body)
+	defer f.Close()
 	if err != nil || l <= 0 {
 		//todo report to tracker
 		c.JSON(http.StatusOK, model.RespResult{
 			Status: common.Fail,
 		})
+		return
 	}
-	defer resp.Body.Close()
-	//todo add db log
+	info, _ := os.Stat(fullPath)
+	fi := model.FileInfo{
+		FileId: sync.FileId,
+		Name:   info.Name(),
+		ReName: info.Name(),
+		Url:    s.GenFileStaticUrl(sync.FilePath, sync.FileName),
+		Size:   info.Size(),
+		Path:   sync.FilePath,
+		Md5:    sync.FileHash,
+		Group:  sync.Group,
+	}
+	bytes, _ := json.Marshal(fi)
+	_ = s.db.Put(sync.FileHash, bytes)
 	c.JSON(http.StatusOK, model.RespResult{
 		Status: common.Success,
 	})
@@ -296,6 +341,7 @@ func (s *Storage) Start() {
 
 	r.GET("/hello", hello)
 	r.GET("/download", s.Download)
+	r.POST("/sync", s.Sync)
 	r.Group("/v1")
 	{
 		r.POST("/upload", s.QuickUpload)

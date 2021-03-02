@@ -66,13 +66,13 @@ func GenFileName(id, fn string) (fileName string) {
 	return id + path.Ext(fn)
 }
 
-//GenFileMD5 生成文件md5 不适合大文件
-func GenFileMD5(file io.Reader) string {
+//GenMD5 生成文件md5 不适合大文件
+func GenMD5(src io.Reader) (string, error) {
 	md5h := md5.New()
-	if _, err := io.Copy(md5h, file); err != nil {
-		return ""
+	if _, err := io.Copy(md5h, src); err != nil {
+		return "", nil
 	}
-	return hex.EncodeToString(md5h.Sum([]byte("")))
+	return hex.EncodeToString(md5h.Sum([]byte(""))), nil
 }
 
 //HttpPost 发送http post请求
@@ -100,4 +100,9 @@ func HttpPost(url string, data interface{}, header map[string]string, timeout ti
 	defer resp.Body.Close()
 	res, err = ioutil.ReadAll(resp.Body)
 	return res, err
+}
+
+func ParseHeaderFilePath(path string) (filePath, filename string) {
+	index := strings.LastIndex(path, "/")
+	return path[:index], path[index+1:]
 }
