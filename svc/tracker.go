@@ -24,7 +24,7 @@ type Hash func([]byte) uint32
 
 type Tracker struct {
 	groups map[string]*Group
-	db     *model.EggDB
+	syncDB *model.EggDB //sync err log
 	hash   Hash
 	mu     sync.RWMutex //map mutex
 	lock   sync.Mutex   //process mutex
@@ -34,7 +34,7 @@ type Tracker struct {
 func NewTracker(fn Hash) *Tracker {
 	t := &Tracker{
 		groups: make(map[string]*Group),
-		db:     model.NewEggDB("tracker"),
+		syncDB: model.NewEggDB("sync-err"),
 		hash:   fn,
 	}
 	if t.hash == nil {
@@ -103,7 +103,7 @@ func (t *Tracker) StorageStatusReport(c *gin.Context) {
 	}
 	//储存空间阈值 //todo
 	if sm.Free <= 100000 {
-		return
+		sm.Status = common.StorageNotEnoughSpace
 	}
 
 	t.lock.Lock()
@@ -126,11 +126,14 @@ func (t *Tracker) StorageStatusReport(c *gin.Context) {
 	if group == nil {
 		return
 	}
-	if err := group.SaveOrUpdateStorage(sm); err == nil {
-		group.Cap = group.GetGroupCap()
+	if err := group.SaveOrUpdateStorage(sm); err != nil {
+		return
 	}
 	t.lock.Unlock()
-	logger.Info("tracker group details", zap.Any("groups", t.groups))
+
+	go func() {
+		t.SetTrackerStatus()
+	}()
 }
 
 //SelectStorageIPHash ip hash选择storage
@@ -147,6 +150,17 @@ func (t *Tracker) SelectStorageIPHash(ip string, g *Group) (s *StorageServer, er
 	//ip hash
 	hashcode := int(t.hash([]byte(ip)))
 	return as[hashcode%len(as)], err
+}
+
+//GetGroups 获取所有group
+func (t *Tracker) GetGroups() []*Group {
+	var gs []*Group
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	for _, group := range t.groups {
+		gs = append(gs, group)
+	}
+	return gs
 }
 
 //GetGroup group name 获取group
@@ -278,14 +292,14 @@ func (t *Tracker) SyncFile(sm *StorageServer, sync model.SyncFileInfo) {
 		return
 	}
 	if sm.Status != common.StorageActive {
-		_ = t.db.Put(sync.FileName+"@"+sync.Action, data)
+		_ = t.syncDB.Put(sync.FileName+"@"+sync.Action, data)
 		return
 	}
 	url := sm.HttpSchema + "://" + sm.Addr + "/sync"
 	//在大文件下这个方法完全不可行
 	resp, err := util.HttpPost(url, sync, nil, time.Second*30)
 	if err != nil || len(resp) == 0 {
-		_ = t.db.Put(sync.FileName+"@"+sync.Action, data)
+		_ = t.syncDB.Put(sync.FileName+"@"+sync.Action, data)
 		return
 	}
 
@@ -293,11 +307,11 @@ func (t *Tracker) SyncFile(sm *StorageServer, sync model.SyncFileInfo) {
 	var res model.RespResult
 	err = json.Unmarshal(resp, &res)
 	if err != nil {
-		_ = t.db.Put(sync.FileName+"@"+sync.Action, data)
+		_ = t.syncDB.Put(sync.FileName+"@"+sync.Action, data)
 		return
 	}
 	if res.Status != common.Success {
-		_ = t.db.Put(sync.FileName+"@"+sync.Action, data)
+		_ = t.syncDB.Put(sync.FileName+"@"+sync.Action, data)
 		return
 	}
 }
@@ -336,13 +350,13 @@ func (t *Tracker) Delete(c *gin.Context) {
 
 			//跳过下线主机
 			if server.Status == common.StorageOffline {
-				_ = t.db.Put(strings.Join([]string{info.FileName, info.Dst, common.SyncDelete}, "@"), data)
+				_ = t.syncDB.Put(strings.Join([]string{info.FileName, info.Dst, common.SyncDelete}, "@"), data)
 				return
 			}
 
 			res, err := util.HttpPost(url, info, nil, time.Second*10)
 			if err != nil {
-				_ = t.db.Put(info.FileName+"@"+common.SyncDelete, data)
+				_ = t.syncDB.Put(info.FileName+"@"+common.SyncDelete, data)
 				return
 			}
 			var resp model.RespResult
@@ -350,7 +364,7 @@ func (t *Tracker) Delete(c *gin.Context) {
 
 			//error log
 			if resp.Status != common.Success {
-				_ = t.db.Put(strings.Join([]string{info.FileName, info.Dst, common.SyncDelete}, "@"), data)
+				_ = t.syncDB.Put(strings.Join([]string{info.FileName, info.Dst, common.SyncDelete}, "@"), data)
 			}
 		}()
 	}
@@ -358,4 +372,33 @@ func (t *Tracker) Delete(c *gin.Context) {
 		Status:  common.Success,
 		Message: "删除成功",
 	})
+}
+
+//SetTrackerStatus 计算整个tracker以及所有group的状态
+func (t *Tracker) SetTrackerStatus() {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	gs := t.GetGroups()
+	for _, group := range gs {
+		vs := make([]*StorageServer, 0)
+		for _, s := range group.GetStorages() {
+			if s.Status == common.StorageActive {
+				//10次没有接收到storage report，认为已离线
+				if time.Now().Unix()-s.UpdateTime > 5*10 {
+					s.Status = common.StorageOffline
+				} else {
+					vs = append(vs, s)
+				}
+			}
+		}
+		//没有可用的storage
+		if len(vs) == 0 {
+			group.Status = common.GroupUnavailable
+			group.Cap = 0
+		} else {
+			group.Status = common.GroupActive
+			group.Cap = group.GetGroupCap()
+		}
+		logger.Info("Tracker & Group status", zap.Any("tracker", t.groups))
+	}
 }
