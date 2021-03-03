@@ -53,6 +53,7 @@ func (t *Tracker) Start() {
 		r.POST("/upload", t.QuickUpload)
 	}
 	r.POST("/delete", t.Delete)
+	r.GET("/g/status", t.GroupStatus)
 
 	err := r.Run(":" + config().Port)
 	if err != nil {
@@ -102,7 +103,7 @@ func (t *Tracker) StorageStatusReport(c *gin.Context) {
 		UpdateTime: time.Now().Unix(),
 	}
 	//储存空间阈值 //todo
-	if sm.Free <= 100000 {
+	if sm.Free <= common.MinStorageSpace {
 		sm.Status = common.StorageNotEnoughSpace
 	}
 
@@ -401,4 +402,29 @@ func (t *Tracker) SetTrackerStatus() {
 		}
 		logger.Info("Tracker & Group status", zap.Any("tracker", t.groups))
 	}
+}
+
+//GroupStatus api 获取集群状态
+func (t *Tracker) GroupStatus(c *gin.Context) {
+	g := c.Query("group")
+	if g != "" {
+		group := t.GetGroup(g)
+		if group != nil {
+			c.JSON(http.StatusOK, model.RespResult{
+				Status: common.Success,
+				Data:   group,
+			})
+			return
+		}
+		c.JSON(http.StatusOK, model.RespResult{
+			Status:  common.Fail,
+			Message: "no such group",
+		})
+		return
+	}
+	groups := t.GetGroups()
+	c.JSON(http.StatusOK, model.RespResult{
+		Status: common.Success,
+		Data:   groups,
+	})
 }

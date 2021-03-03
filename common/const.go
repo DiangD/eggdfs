@@ -49,7 +49,10 @@ const (
 	StorageNotEnoughSpace
 )
 
+//sync option
 const (
 	SyncAdd    = "ADD"
 	SyncDelete = "DELETE"
 )
+
+const MinStorageSpace = 100000
