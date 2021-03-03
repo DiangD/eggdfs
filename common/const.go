@@ -24,6 +24,7 @@ const (
 	FileSaveFail
 	ProxyBadGateWay
 	FileCheckSumFail
+	ParamBindFail
 )
 
 //http请求头
@@ -32,7 +33,7 @@ const (
 	HeaderFileUUID      = "Egg-Dfs-FileUUID"
 	HeaderFileUploadRes = "Egg-Dfs-Upload-Res"
 	HeaderFileHash      = "Egg-Dfs-FIle-Hash"
-	HeaderFilePath      = "Egg-Dfs-FIle-Path"
+	HeaderFilePath      = "Egg-Dfs-FIle-File"
 )
 
 //group状态标识

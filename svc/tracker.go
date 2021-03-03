@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -51,6 +52,7 @@ func (t *Tracker) Start() {
 	{
 		r.POST("/upload", t.QuickUpload)
 	}
+	r.POST("/delete", t.Delete)
 
 	err := r.Run(":" + config().Port)
 	if err != nil {
@@ -276,24 +278,81 @@ func (t *Tracker) SyncFile(sm *StorageServer, sync model.SyncFileInfo) {
 		return
 	}
 	if sm.Status != common.StorageActive {
-		_ = t.db.Put(sync.FileId+"@"+sync.Action, data)
+		_ = t.db.Put(sync.FileName+"@"+sync.Action, data)
 		return
 	}
 	url := sm.HttpSchema + "://" + sm.Addr + "/sync"
 	//在大文件下这个方法完全不可行
 	resp, err := util.HttpPost(url, sync, nil, time.Second*30)
 	if err != nil || len(resp) == 0 {
-		_ = t.db.Put(sync.FileId+"@"+sync.Action, data)
+		_ = t.db.Put(sync.FileName+"@"+sync.Action, data)
 		return
 	}
+
+	//res code写入日志
 	var res model.RespResult
 	err = json.Unmarshal(resp, &res)
 	if err != nil {
-		_ = t.db.Put(sync.FileId+"@"+sync.Action, data)
+		_ = t.db.Put(sync.FileName+"@"+sync.Action, data)
 		return
 	}
 	if res.Status != common.Success {
-		_ = t.db.Put(sync.FileId+"@"+sync.Action, data)
+		_ = t.db.Put(sync.FileName+"@"+sync.Action, data)
 		return
 	}
+}
+
+func (t *Tracker) Delete(c *gin.Context) {
+	var deleteFile struct {
+		FileID string `json:"file_id" form:"file_id"`
+		Group  string `json:"group" form:"group"`
+		MD5    string `json:"md5" form:"md5"`
+		File   string `json:"file" form:"file"`
+	}
+	if err := c.ShouldBind(&deleteFile); err != nil {
+		c.JSON(http.StatusOK, model.RespResult{
+			Status:  common.ParamBindFail,
+			Message: "参数绑定失败",
+		})
+	}
+	logger.Info("delete info", zap.Any("info", deleteFile))
+	g := t.GetGroup(deleteFile.Group)
+	for _, s := range g.GetStorages() {
+		server := s
+		go func() {
+			filePath, filename := util.ParseHeaderFilePath(deleteFile.File)
+			info := model.SyncFileInfo{
+				Dst:      server.HttpSchema + "://" + server.Addr,
+				FileId:   deleteFile.FileID,
+				FilePath: filePath,
+				FileName: filename,
+				FileHash: deleteFile.MD5,
+				Action:   common.SyncDelete,
+				Group:    g.Name,
+			}
+			url := server.HttpSchema + "://" + server.Addr + "/sync"
+			data, _ := json.Marshal(info)
+
+			//跳过下线主机
+			if server.Status == common.StorageOffline {
+				_ = t.db.Put(strings.Join([]string{info.FileName, info.Dst, common.SyncDelete}, "@"), data)
+				return
+			}
+
+			res, err := util.HttpPost(url, info, nil, time.Second*10)
+			if err != nil {
+				_ = t.db.Put(info.FileName+"@"+common.SyncDelete, data)
+				return
+			}
+			var resp model.RespResult
+			_ = json.Unmarshal(res, &resp)
+			if resp.Status != common.Success {
+				_ = t.db.Put(strings.Join([]string{info.FileName, info.Dst, common.SyncDelete}, "@"), data)
+			}
+		}()
+	}
+	c.JSON(http.StatusOK, model.RespResult{
+		Status:  common.Success,
+		Message: "删除成功",
+	})
 }

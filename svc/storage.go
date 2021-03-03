@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -223,13 +224,14 @@ func (s *Storage) Sync(c *gin.Context) {
 	var sync model.SyncFileInfo
 	var syncFunc SyncFunc
 	_ = c.ShouldBindJSON(&sync)
-
+	logger.Info("sync file info", zap.Any("info", sync))
+	//add
 	if sync.Action == common.SyncAdd {
 		syncFunc = s.SyncFileAdd
 	}
-
+	//delete
 	if sync.Action == common.SyncDelete {
-
+		syncFunc = s.SyncFileDelete
 	}
 
 	if syncFunc != nil {
@@ -240,6 +242,7 @@ func (s *Storage) Sync(c *gin.Context) {
 //SyncFunc 同步函数
 type SyncFunc func(model.SyncFileInfo, *gin.Context)
 
+//SyncFileAdd 文件新增同步函数
 func (s *Storage) SyncFileAdd(sync model.SyncFileInfo, c *gin.Context) {
 	base := config().Storage.StorageDir + "/" + sync.FilePath
 	if _, err := os.Stat(base); err != nil {
@@ -305,6 +308,25 @@ func (s *Storage) SyncFileAdd(sync model.SyncFileInfo, c *gin.Context) {
 	c.JSON(http.StatusOK, model.RespResult{
 		Status: common.Success,
 	})
+}
+
+//SyncFileDelete 文件删除同步函数
+func (s *Storage) SyncFileDelete(sync model.SyncFileInfo, c *gin.Context) {
+	gf := config()
+	fullPath := strings.Join([]string{gf.Storage.StorageDir, sync.FilePath, sync.FileName}, "/")
+	if _, err := os.Stat(fullPath); err != nil {
+		c.JSON(http.StatusOK, model.RespResult{Status: common.Success})
+		return
+	}
+	err := os.Remove(fullPath)
+	if err != nil {
+		c.JSON(http.StatusOK, model.RespResult{Status: common.Fail})
+		return
+	}
+	if sync.FileHash != "" {
+		_ = s.db.Delete(sync.FileHash)
+	}
+	c.JSON(http.StatusOK, model.RespResult{Status: common.Success})
 }
 
 //startTimerTask 启动定时任务
