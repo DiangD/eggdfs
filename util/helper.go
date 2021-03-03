@@ -102,6 +102,7 @@ func HttpPost(url string, data interface{}, header map[string]string, timeout ti
 	return res, err
 }
 
+//ParseHeaderFilePath 解析路径与文件名 eq path.Dir path.Base
 func ParseHeaderFilePath(path string) (filePath, filename string) {
 	index := strings.LastIndex(path, "/")
 	return path[:index], path[index+1:]

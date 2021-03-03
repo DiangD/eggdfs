@@ -302,12 +302,13 @@ func (t *Tracker) SyncFile(sm *StorageServer, sync model.SyncFileInfo) {
 	}
 }
 
+//Delete 文件删除
 func (t *Tracker) Delete(c *gin.Context) {
 	var deleteFile struct {
 		FileID string `json:"file_id" form:"file_id"`
-		Group  string `json:"group" form:"group"`
+		Group  string `json:"group" form:"group" binding:"required"` // group required
 		MD5    string `json:"md5" form:"md5"`
-		File   string `json:"file" form:"file"`
+		File   string `json:"file" form:"file" binding:"required"` //path required
 	}
 	if err := c.ShouldBind(&deleteFile); err != nil {
 		c.JSON(http.StatusOK, model.RespResult{
@@ -346,6 +347,8 @@ func (t *Tracker) Delete(c *gin.Context) {
 			}
 			var resp model.RespResult
 			_ = json.Unmarshal(res, &resp)
+
+			//error log
 			if resp.Status != common.Success {
 				_ = t.db.Put(strings.Join([]string{info.FileName, info.Dst, common.SyncDelete}, "@"), data)
 			}

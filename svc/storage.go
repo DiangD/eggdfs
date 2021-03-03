@@ -292,6 +292,7 @@ func (s *Storage) SyncFileAdd(sync model.SyncFileInfo, c *gin.Context) {
 		})
 		return
 	}
+
 	info, _ := os.Stat(fullPath)
 	fi := model.FileInfo{
 		FileId: sync.FileId,
@@ -313,11 +314,13 @@ func (s *Storage) SyncFileAdd(sync model.SyncFileInfo, c *gin.Context) {
 //SyncFileDelete 文件删除同步函数
 func (s *Storage) SyncFileDelete(sync model.SyncFileInfo, c *gin.Context) {
 	gf := config()
+	//拼接路径
 	fullPath := strings.Join([]string{gf.Storage.StorageDir, sync.FilePath, sync.FileName}, "/")
 	if _, err := os.Stat(fullPath); err != nil {
 		c.JSON(http.StatusOK, model.RespResult{Status: common.Success})
 		return
 	}
+	//删除文件
 	err := os.Remove(fullPath)
 	if err != nil {
 		c.JSON(http.StatusOK, model.RespResult{Status: common.Fail})
