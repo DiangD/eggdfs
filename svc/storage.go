@@ -86,7 +86,7 @@ func (s *Storage) QuickUpload(c *gin.Context) {
 		path, _ := filepath.Abs(config().Storage.StorageDir)
 		if err != nil {
 			logger.Error("文件保存路径创建失败", zap.String("file_baseDir", path))
-			//todo tell to tracker
+			go s.TransErrorLogToTracker(common.DirCreateFail, "文件保存路径创建失败"+path)
 			c.JSON(http.StatusOK, model.RespResult{
 				Status:  common.DirCreateFail,
 				Message: "文件保存路径创建失败",
@@ -248,9 +248,9 @@ func (s *Storage) SyncFileAdd(sync model.SyncFileInfo, c *gin.Context) {
 	if _, err := os.Stat(base); err != nil {
 		err := os.MkdirAll(base, os.ModePerm)
 		if err != nil {
-			//todo report to tracker
+			go s.TransErrorLogToTracker(common.DirCreateFail, "文件保存路径创建失败"+base)
 			c.JSON(http.StatusOK, model.RespResult{
-				Status: common.Fail,
+				Status: common.DirCreateFail,
 			})
 			return
 		}
@@ -277,7 +277,7 @@ func (s *Storage) SyncFileAdd(sync model.SyncFileInfo, c *gin.Context) {
 	fullPath := base + "/" + sync.FileName
 	f, err := os.Create(fullPath)
 	if err != nil {
-		//todo report to tracker
+		go s.TransErrorLogToTracker(common.DirCreateFail, "文件保存路径创建失败"+fullPath)
 		c.JSON(http.StatusOK, model.RespResult{
 			Status: common.DirCreateFail,
 		})
@@ -286,7 +286,7 @@ func (s *Storage) SyncFileAdd(sync model.SyncFileInfo, c *gin.Context) {
 	l, err := io.Copy(f, resp.Body)
 	defer f.Close()
 	if err != nil || l <= 0 {
-		//todo report to tracker
+		go s.TransErrorLogToTracker(common.FileSaveFail, "文件同步保存失败"+fullPath)
 		c.JSON(http.StatusOK, model.RespResult{
 			Status: common.Fail,
 		})
@@ -332,6 +332,28 @@ func (s *Storage) SyncFileDelete(sync model.SyncFileInfo, c *gin.Context) {
 	c.JSON(http.StatusOK, model.RespResult{Status: common.Success})
 }
 
+//TransErrorLogToTracker 同步错误日志到tracker
+func (s *Storage) TransErrorLogToTracker(code int, msg string) {
+	type errMsg struct {
+		ErrCode int
+		Group   string
+		Host    string
+		Port    string
+		ErrMsg  string
+	}
+	c := config()
+	for _, url := range s.trackers {
+		m := errMsg{
+			ErrCode: code,
+			Group:   c.Storage.Group,
+			Host:    c.Host,
+			Port:    c.Port,
+			ErrMsg:  msg,
+		}
+		util.HttpPost(url+"/err/log", m, nil, time.Second*5)
+	}
+}
+
 //startTimerTask 启动定时任务
 func (s *Storage) startTimerTask() error {
 	cr := cron.New(cron.WithSeconds())
@@ -353,8 +375,8 @@ func (s *Storage) Start() {
 		err := os.MkdirAll(sd, os.ModePerm)
 		path, _ := filepath.Abs(config().Storage.StorageDir)
 		if err != nil {
+			go s.TransErrorLogToTracker(common.DirCreateFail, "root文件夹创建失败"+path)
 			logger.Error("文件保存路径创建失败", zap.String("storage_dir", path))
-			//todo tell to tracker
 		}
 		logger.Info("文件保存路径创建成功", zap.String("storage_dir", path))
 	}
@@ -362,13 +384,19 @@ func (s *Storage) Start() {
 	r := gin.Default()
 	//gin.SetMode(gin.ReleaseMode)
 
+	//file system
 	r.StaticFS(conf.Config().Storage.Group, http.Dir(config().Storage.StorageDir))
 
 	r.GET("/hello", hello)
+
+	//download file
 	r.GET("/download", s.Download)
+
+	//sync file
 	r.POST("/sync", s.Sync)
 	r.Group("/v1")
 	{
+		//upload file
 		r.POST("/upload", s.QuickUpload)
 	}
 

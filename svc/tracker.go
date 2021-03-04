@@ -7,6 +7,7 @@ import (
 	"eggdfs/util"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
@@ -47,13 +48,19 @@ func NewTracker(fn Hash) *Tracker {
 func (t *Tracker) Start() {
 	r := gin.Default()
 
+	//report storage status
 	r.POST("/status", t.StorageStatusReport)
 	r.Group("/v1")
 	{
+		//upload file
 		r.POST("/upload", t.QuickUpload)
 	}
+	//delete file
 	r.POST("/delete", t.Delete)
+	//get group status
 	r.GET("/g/status", t.GroupStatus)
+	//sync err-log from storage
+	r.POST("/err/log", t.SyncErrorMsg)
 
 	err := r.Run(":" + config().Port)
 	if err != nil {
@@ -213,7 +220,7 @@ func (t *Tracker) SelectGroupForUpload() (*Group, error) {
 	return gs[0], nil
 }
 
-//QuickUpload 小文件快传
+//QuickUpload api 小文件快传
 func (t *Tracker) QuickUpload(c *gin.Context) {
 	//获取group
 	group, err := t.SelectGroupForUpload()
@@ -316,7 +323,7 @@ func (t *Tracker) SyncFile(sm *StorageServer, sync model.SyncFileInfo) {
 	}
 }
 
-//Delete 文件删除
+//Delete api 文件删除
 func (t *Tracker) Delete(c *gin.Context) {
 	var deleteFile struct {
 		FileID string `json:"file_id" form:"file_id"`
@@ -426,4 +433,24 @@ func (t *Tracker) GroupStatus(c *gin.Context) {
 		Status: common.Success,
 		Data:   groups,
 	})
+}
+
+//SyncErrorMsg 同步storage的err log
+func (t *Tracker) SyncErrorMsg(c *gin.Context) {
+	var errMsg struct {
+		ErrCode int
+		Group   string
+		Host    string
+		Port    string
+		ErrMsg  string
+	}
+
+	_ = c.ShouldBindJSON(&errMsg)
+	if errMsg.ErrMsg != "" {
+		addr := net.JoinHostPort(errMsg.Host, errMsg.Port)
+		//同步到tracker日志中，方便排查
+		logger.Error(fmt.Sprintf("sync err log => errcode:%d,msg:%s", errMsg.ErrCode, errMsg.ErrMsg),
+			zap.String("addr", addr),
+			zap.String("group", errMsg.Group))
+	}
 }
