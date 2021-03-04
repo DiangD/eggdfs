@@ -335,11 +335,11 @@ func (s *Storage) SyncFileDelete(sync model.SyncFileInfo, c *gin.Context) {
 //TransErrorLogToTracker 同步错误日志到tracker
 func (s *Storage) TransErrorLogToTracker(code int, msg string) {
 	type errMsg struct {
-		ErrCode int
-		Group   string
-		Host    string
-		Port    string
-		ErrMsg  string
+		ErrCode int    `json:"err_code"`
+		Group   string `json:"group"`
+		Host    string `json:"host"`
+		Port    string `json:"port"`
+		ErrMsg  string `json:"err_msg"`
 	}
 	c := config()
 	for _, url := range s.trackers {

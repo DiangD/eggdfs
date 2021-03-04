@@ -438,11 +438,11 @@ func (t *Tracker) GroupStatus(c *gin.Context) {
 //SyncErrorMsg 同步storage的err log
 func (t *Tracker) SyncErrorMsg(c *gin.Context) {
 	var errMsg struct {
-		ErrCode int
-		Group   string
-		Host    string
-		Port    string
-		ErrMsg  string
+		ErrCode int    `json:"err_code"`
+		Group   string `json:"group"`
+		Host    string `json:"host"`
+		Port    string `json:"port"`
+		ErrMsg  string `json:"err_msg"`
 	}
 
 	_ = c.ShouldBindJSON(&errMsg)
