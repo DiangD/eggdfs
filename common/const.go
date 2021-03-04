@@ -29,11 +29,12 @@ const (
 
 //http请求头
 const (
-	HeaderUploadFileDir = "Egg-Dfs-FileDir"
-	HeaderFileUUID      = "Egg-Dfs-FileUUID"
-	HeaderFileUploadRes = "Egg-Dfs-Upload-Res"
-	HeaderFileHash      = "Egg-Dfs-FIle-Hash"
-	HeaderFilePath      = "Egg-Dfs-FIle-File"
+	HeaderUploadFileDir    = "Egg-Dfs-FileDir"
+	HeaderFileUUID         = "Egg-Dfs-FileUUID"
+	HeaderFileUploadRes    = "Egg-Dfs-Upload-Res"
+	HeaderFileHash         = "Egg-Dfs-FIle-Hash"
+	HeaderFilePath         = "Egg-Dfs-FIle-File"
+	HeaderDownloadFilename = "Egg-Dfs-Download-Filename"
 )
 
 //group状态标识

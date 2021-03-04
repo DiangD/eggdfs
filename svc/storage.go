@@ -18,6 +18,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -79,14 +80,14 @@ func (s *Storage) QuickUpload(c *gin.Context) {
 	}
 
 	customDir := c.GetHeader(common.HeaderUploadFileDir)
-	path := util.GenFilePath(customDir)
-	baseDir := config().Storage.StorageDir + "/" + path
+	filePath := util.GenFilePath(customDir)
+	baseDir := config().Storage.StorageDir + "/" + filePath
 	if _, err := os.Stat(baseDir); err != nil {
 		err := os.MkdirAll(baseDir, os.ModePerm)
-		path, _ := filepath.Abs(config().Storage.StorageDir)
+		p, _ := filepath.Abs(config().Storage.StorageDir)
 		if err != nil {
-			logger.Error("文件保存路径创建失败", zap.String("file_baseDir", path))
-			go s.TransErrorLogToTracker(common.DirCreateFail, "文件保存路径创建失败"+path)
+			logger.Error("文件保存路径创建失败", zap.String("file_baseDir", p))
+			go s.TransErrorLogToTracker(common.DirCreateFail, "文件保存路径创建失败"+p)
 			c.JSON(http.StatusOK, model.RespResult{
 				Status:  common.DirCreateFail,
 				Message: "文件保存路径创建失败",
@@ -94,7 +95,7 @@ func (s *Storage) QuickUpload(c *gin.Context) {
 			})
 			return
 		}
-		logger.Info("文件保存路径创建成功", zap.String("file_baseDir", path))
+		logger.Info("文件保存路径创建成功", zap.String("file_baseDir", p))
 	}
 
 	file, err := c.FormFile("file")
@@ -136,8 +137,8 @@ func (s *Storage) QuickUpload(c *gin.Context) {
 		FileId: uuid,
 		Name:   file.Filename,
 		ReName: fileName,
-		Url:    s.GenFileStaticUrl(path, fileName),
-		Path:   fmt.Sprintf("%s/%s", path, fileName),
+		Url:    s.GenFileStaticUrl(filePath, fileName),
+		Path:   fmt.Sprintf("%s/%s", filePath, fileName),
 		Md5:    md5hash,
 		Size:   file.Size,
 		Group:  config().Storage.Group,
@@ -146,7 +147,7 @@ func (s *Storage) QuickUpload(c *gin.Context) {
 	_ = s.db.Put(fi.Md5, bytes)
 	c.Writer.Header().Set(common.HeaderFileUploadRes, strconv.Itoa(common.Success))
 	c.Writer.Header().Set(common.HeaderFileHash, fi.Md5)
-	c.Writer.Header().Set(common.HeaderFilePath, path+"/"+fileName)
+	c.Writer.Header().Set(common.HeaderFilePath, filePath+"/"+fileName)
 	c.JSON(http.StatusOK, model.RespResult{
 		Status:  common.Success,
 		Message: "文件保存成功",
@@ -157,9 +158,9 @@ func (s *Storage) QuickUpload(c *gin.Context) {
 //GenFileStaticUrl 生成文件url
 func (s *Storage) GenFileStaticUrl(basePath, filename string) (url string) {
 	c := config()
-	path := basePath + "/" + filename
+	p := basePath + "/" + filename
 	//todo domain域名
-	url = fmt.Sprintf("%s://%s/%s/%s", s.httpSchema, net.JoinHostPort(c.Host, c.Port), c.Storage.Group, path)
+	url = fmt.Sprintf("%s://%s/%s/%s", s.httpSchema, net.JoinHostPort(c.Host, c.Port), c.Storage.Group, p)
 	return
 }
 
@@ -189,11 +190,31 @@ func (s *Storage) SaveQuickUploadedFile(file *multipart.FileHeader, dst string, 
 	return md5hash, nil
 }
 
-//Download 下载 example todo
+//Download 下载
 func (s *Storage) Download(c *gin.Context) {
-	c.Writer.Header().Add("Content-Disposition", fmt.Sprintf("attachment; filename=%s", "goland.exe")) //fmt.Sprintf("attachment; filename=%s", filename)对下载的文件重命名
+	filePath := c.Query("file")
+	if filePath == "" {
+		c.JSON(http.StatusOK, model.RespResult{
+			Status: common.ParamBindFail,
+		})
+		return
+	}
+	fullPath := config().Storage.StorageDir + "/" + filePath
+	if _, err := os.Stat(fullPath); err != nil {
+		c.JSON(http.StatusOK, model.RespResult{
+			Status:  common.Fail,
+			Message: "no such file",
+		})
+		return
+	}
+	filename := c.GetHeader(common.HeaderDownloadFilename)
+	if filename == "" {
+		filename = path.Base(filePath)
+	}
+	//对下载的文件重命名
+	c.Writer.Header().Add("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 	c.Writer.Header().Add("Content-Type", "application/octet-stream")
-	c.File("meta/2021/2/20/2000212.exe")
+	c.File(fullPath)
 }
 
 //Status 向tracker回报状态
@@ -373,12 +394,12 @@ func (s *Storage) Start() {
 	sd := config().Storage.StorageDir
 	if _, err := os.Stat(sd); err != nil {
 		err := os.MkdirAll(sd, os.ModePerm)
-		path, _ := filepath.Abs(config().Storage.StorageDir)
+		p, _ := filepath.Abs(config().Storage.StorageDir)
 		if err != nil {
-			go s.TransErrorLogToTracker(common.DirCreateFail, "root文件夹创建失败"+path)
-			logger.Error("文件保存路径创建失败", zap.String("storage_dir", path))
+			go s.TransErrorLogToTracker(common.DirCreateFail, "root文件夹创建失败"+p)
+			logger.Error("文件保存路径创建失败", zap.String("storage_dir", p))
 		}
-		logger.Info("文件保存路径创建成功", zap.String("storage_dir", path))
+		logger.Info("文件保存路径创建成功", zap.String("storage_dir", p))
 	}
 
 	r := gin.Default()

@@ -61,6 +61,11 @@ func (t *Tracker) Start() {
 	r.GET("/g/status", t.GroupStatus)
 	//sync err-log from storage
 	r.POST("/err/log", t.SyncErrorMsg)
+	r.GET("/download", t.Download)
+
+	if err := t.startTrackerTimerTask(); err != nil {
+		logger.Panic("Tracker定时任务启动失败")
+	}
 
 	err := r.Run(":" + config().Port)
 	if err != nil {
@@ -72,6 +77,40 @@ func (t *Tracker) Start() {
 //startTrackerTimerTask tracker定时任务
 func (t *Tracker) startTrackerTimerTask() error {
 	cr := cron.New(cron.WithSeconds())
+
+	RepairSyncFail := func() {
+		iter := t.syncDB.Ldb.NewIterator(nil, nil)
+		for iter.Next() {
+			v := iter.Value()
+			var sfi model.SyncFileInfo
+			err := json.Unmarshal(v, &sfi)
+			if err != nil {
+				continue
+			}
+			g := t.GetGroup(sfi.Group)
+			if g == nil {
+				continue
+			}
+			if g.GetStorage(sfi.Dst).Status == 1 && g.GetStorage(sfi.Src).Status == 1 {
+				url := sfi.Dst + "/sync"
+				resp, err := util.HttpPost(url, sfi, nil, time.Second*10)
+				if err != nil || len(resp) <= 0 {
+					continue
+				}
+				var res model.RespResult
+				_ = json.Unmarshal(resp, &res)
+				if res.Status != common.Success {
+					continue
+				}
+				_ = t.syncDB.Delete(sfi.FileName + "@" + sfi.Action)
+			}
+		}
+	}
+	//30min
+	_, err := cr.AddFunc("0 0/30 * * * *", RepairSyncFail)
+	if err != nil {
+		return err
+	}
 
 	cr.Start()
 	return nil
@@ -357,7 +396,7 @@ func (t *Tracker) Delete(c *gin.Context) {
 
 			//跳过下线主机
 			if server.Status == common.StorageOffline {
-				_ = t.syncDB.Put(strings.Join([]string{info.FileName, info.Dst, common.SyncDelete}, "@"), data)
+				_ = t.syncDB.Put(strings.Join([]string{info.FileName, common.SyncDelete}, "@"), data)
 				return
 			}
 
@@ -371,7 +410,7 @@ func (t *Tracker) Delete(c *gin.Context) {
 
 			//error log
 			if resp.Status != common.Success {
-				_ = t.syncDB.Put(strings.Join([]string{info.FileName, info.Dst, common.SyncDelete}, "@"), data)
+				_ = t.syncDB.Put(strings.Join([]string{info.FileName, common.SyncDelete}, "@"), data)
 			}
 		}()
 	}
@@ -452,5 +491,31 @@ func (t *Tracker) SyncErrorMsg(c *gin.Context) {
 		logger.Error(fmt.Sprintf("sync err log => errcode:%d,msg:%s", errMsg.ErrCode, errMsg.ErrMsg),
 			zap.String("addr", addr),
 			zap.String("group", errMsg.Group))
+	}
+}
+
+//Download api 下载
+func (t *Tracker) Download(c *gin.Context) {
+	g := c.Query("group")
+	if g == "" {
+		c.JSON(http.StatusOK, model.RespResult{Status: common.ParamBindFail})
+		return
+	}
+	group := t.GetGroup(g)
+	if group == nil || group.Status != common.GroupActive {
+		c.JSON(http.StatusOK, model.RespResult{Status: common.Fail, Message: "no available group"})
+		return
+	}
+	if s, err := t.SelectStorageIPHash(c.ClientIP(), group); err == nil {
+		proxy := NewTrackerProxy(s.HttpSchema, s.Addr, s.Group, t, c)
+		if err := t.httpProxy(proxy, c); err != nil {
+			c.JSON(http.StatusOK, model.RespResult{
+				Status:  common.Fail,
+				Message: err.Error(),
+			})
+			return
+		}
+	} else {
+		c.JSON(http.StatusOK, model.RespResult{Status: common.Fail, Message: "no available group or storage"})
 	}
 }

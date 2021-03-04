@@ -1,11 +1,12 @@
 {
   "env": "debug",
-  "deploy_type": "storage",
+  "deploy_type": "tracker",
+  "http_schema": "http",
   "port": "8081",
-  "host": "localhost",
+  "host": "127.0.0.1",
   "log_dir": "./log/zap.log",
   "tracker": {
-    "node_id": "1",
+    "node_id": "1000",
     "enable_tmp_file": true
   },
   "storage": {
@@ -14,7 +15,7 @@
     "storage_dir": "./meta",
     "trackers": [
       "http://127.0.0.1:9000",
-      "http://127.0.0.1:9001"
+      "http://127.0.0.1:8081"
     ]
   }
 }
