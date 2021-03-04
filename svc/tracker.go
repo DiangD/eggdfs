@@ -102,7 +102,7 @@ func (t *Tracker) StorageStatusReport(c *gin.Context) {
 		Status:     common.StorageActive,
 		UpdateTime: time.Now().Unix(),
 	}
-	//储存空间阈值 //todo
+	//储存空间阈值
 	if sm.Free <= common.MinStorageSpace {
 		sm.Status = common.StorageNotEnoughSpace
 	}
@@ -122,7 +122,6 @@ func (t *Tracker) StorageStatusReport(c *gin.Context) {
 	}
 
 	//group已注册
-	//todo 思路：应该先添加storage还是先计算cap... 逻辑：是否及时计算cap，以及group状态
 	group := t.GetGroup(sm.Group)
 	if group == nil {
 		return
@@ -286,7 +285,7 @@ func (t *Tracker) httpProxy(tp *TrackerProxy, c *gin.Context) error {
 	return tp.HttpProxy(c.Writer, c.Request, tp.AbortErrorHandler)
 }
 
-//SyncFile 同步函数 todo
+//SyncFile 同步函数
 func (t *Tracker) SyncFile(sm *StorageServer, sync model.SyncFileInfo) {
 	data, err := json.Marshal(sync)
 	if err != nil {
