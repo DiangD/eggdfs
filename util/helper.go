@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/md5"
+	"eggdfs/common"
 	"eggdfs/logger"
 	"eggdfs/svc/conf"
 	"encoding/hex"
@@ -106,4 +107,14 @@ func HttpPost(url string, data interface{}, header map[string]string, timeout ti
 func ParseHeaderFilePath(path string) (filePath, filename string) {
 	index := strings.LastIndex(path, "/")
 	return path[:index], path[index+1:]
+}
+
+func GetFileContentType(ext string) string {
+	ext = strings.ToLower(ext)
+	if val, ok := common.FileContentType[ext]; ok {
+		if val != "" {
+			return val
+		}
+	}
+	return common.DefaultFileDownloadContentType
 }

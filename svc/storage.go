@@ -213,7 +213,7 @@ func (s *Storage) Download(c *gin.Context) {
 	}
 	//对下载的文件重命名
 	c.Writer.Header().Add("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
-	c.Writer.Header().Add("Content-Type", "application/octet-stream")
+	c.Writer.Header().Add("Content-Type", util.GetFileContentType(path.Ext(filePath)))
 	c.File(fullPath)
 }
 
