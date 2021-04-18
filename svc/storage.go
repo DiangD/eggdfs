@@ -128,8 +128,7 @@ func (s *Storage) QuickUpload(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusOK, model.RespResult{
 			Status:  common.FileSaveFail,
-			Message: "文件保存失败",
-			Data:    err.Error(),
+			Message: err.Error(),
 		})
 		return
 	}
@@ -181,7 +180,12 @@ func (s *Storage) SaveQuickUploadedFile(file *multipart.FileHeader, dst string, 
 		return
 	}
 	//检查文件完整性
-	md5hash, _ = util.GenMD5(src)
+	local, err := os.Open(dst)
+	if err != nil {
+		return
+	}
+	md5hash, _ = util.GenMD5(local)
+	logger.Info("md5", zap.String("md5", md5hash))
 	if hash != md5hash && hash != "" {
 		go os.Remove(dst)
 		err = errors.New("file is already damaged")
