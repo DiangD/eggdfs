@@ -24,11 +24,12 @@ import (
 type Hash func([]byte) uint32
 
 type Tracker struct {
-	groups map[string]*Group
-	syncDB *model.EggDB //sync err log
-	hash   Hash
-	mu     sync.RWMutex //map mutex
-	lock   sync.Mutex   //process mutex
+	groups     map[string]*Group
+	syncDB     *model.EggDB //sync err log
+	hash       Hash
+	mu         sync.RWMutex //map mutex
+	lock       sync.Mutex   //process mutex
+	statusLock sync.Mutex   //status compute mutex
 }
 
 //NewTracker 构造函数可使用自定义的hash
@@ -175,11 +176,10 @@ func (t *Tracker) StorageStatusReport(c *gin.Context) {
 	if err := group.SaveOrUpdateStorage(sm); err != nil {
 		return
 	}
-	t.lock.Unlock()
-
 	go func() {
 		t.SetTrackerStatus()
 	}()
+	t.lock.Unlock()
 }
 
 //SelectStorageIPHash ip hash选择storage
@@ -422,8 +422,8 @@ func (t *Tracker) Delete(c *gin.Context) {
 
 //SetTrackerStatus 计算整个tracker以及所有group的状态
 func (t *Tracker) SetTrackerStatus() {
-	t.lock.Lock()
-	defer t.lock.Unlock()
+	t.statusLock.Lock()
+	defer t.statusLock.Unlock()
 	gs := t.GetGroups()
 	for _, group := range gs {
 		vs := make([]*StorageServer, 0)

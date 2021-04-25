@@ -407,7 +407,6 @@ func (s *Storage) Start() {
 	}
 
 	r := gin.Default()
-	//gin.SetMode(gin.ReleaseMode)
 
 	//file system
 	r.StaticFS(conf.Config().Storage.Group, http.Dir(config().Storage.StorageDir))
