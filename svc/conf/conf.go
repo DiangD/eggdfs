@@ -3,7 +3,7 @@ package conf
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
-	"io/ioutil"
+	"io"
 	"strings"
 	"sync/atomic"
 	"unsafe"
@@ -76,6 +76,6 @@ func init() {
 	parseConfig()
 	if strings.ToLower(Config().Env) == "prod" {
 		gin.SetMode(gin.ReleaseMode)
-		gin.DefaultWriter = ioutil.Discard
+		gin.DefaultWriter = io.Discard
 	}
 }

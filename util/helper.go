@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"github.com/bwmarrin/snowflake"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"path"
@@ -99,7 +98,7 @@ func HttpPost(url string, data interface{}, header map[string]string, timeout ti
 		return
 	}
 	defer resp.Body.Close()
-	res, err = ioutil.ReadAll(resp.Body)
+	res, err = io.ReadAll(resp.Body)
 	return res, err
 }
 

@@ -176,9 +176,7 @@ func (t *Tracker) StorageStatusReport(c *gin.Context) {
 	if err := group.SaveOrUpdateStorage(sm); err != nil {
 		return
 	}
-	go func() {
-		t.SetTrackerStatus()
-	}()
+	t.SetTrackerStatus()
 	t.lock.Unlock()
 }
 
@@ -422,8 +420,6 @@ func (t *Tracker) Delete(c *gin.Context) {
 
 //SetTrackerStatus 计算整个tracker以及所有group的状态
 func (t *Tracker) SetTrackerStatus() {
-	t.statusLock.Lock()
-	defer t.statusLock.Unlock()
 	gs := t.GetGroups()
 	for _, group := range gs {
 		vs := make([]*StorageServer, 0)
